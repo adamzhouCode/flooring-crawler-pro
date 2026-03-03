@@ -13,6 +13,8 @@ from urllib.parse import urljoin, urlparse
 
 # Scraper & Search
 import requests
+import urllib3
+import logging
 from bs4 import BeautifulSoup
 import trafilatura
 from curl_cffi import requests as curl_requests
@@ -129,6 +131,7 @@ BLACKLISTED_DOMAINS = {
     'yellowpages.com', 'yelp.com', 'dianping.com', '58.com', 'ganji.com',
     'aliexpress.com', 'taobao.com', 'jd.com', 'tmall.com', '1688.com',
     'b2b168.com', 'hc360.com', 'made-in-china.com', 'alibaba.com',
+    'makepolo.com', 'ebdoor.com', '慧聪网', 'b2b', 'huangye88.com',
     # 具体杂项站点
     'bjnews.com.cn', 'chinafloor.cn', 'chinatimber.org', 'zhilengwang.cn',
     'shzh.net', 'zol.com.cn', '360che.com', 'pchouse.com.cn',
@@ -275,8 +278,29 @@ class Scraper:
     def get_deep_context(url: str, depth: int = 2) -> str:
         headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36'}
         try:
-            resp = curl_requests.get(url, headers=headers, timeout=15, impersonate="chrome110", allow_redirects=True)
-            if resp.status_code != 200: return f"[CRAWL_ERROR] HTTP {resp.status_code}"
+            # 禁用警告
+            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+            
+            try:
+                # 优先尝试 curl_cffi，解决大部分 Cloudflare / TLS 指纹拦截
+                resp = curl_requests.get(url, headers=headers, timeout=10, impersonate="chrome110", allow_redirects=True)
+            except Exception as e_curl:
+                try:
+                    # Fallback 到标准 requests（无指纹，且不验证 SSL），适合老站及部分被 curl_cffi 阻断的站
+                    resp = requests.get(url, headers=headers, timeout=10, verify=False, allow_redirects=True)
+                except Exception as e_req:
+                    if "timeout" in str(e_req).lower():
+                        return f"[CRAWL_ERROR] 网站连接超时(死链或仅限国内IP访问)"
+                    if "403" in str(e_req) or "forbidden" in str(e_req).lower():
+                        return f"[CRAWL_ERROR] 网站拒绝访问(403防火墙拦截)"
+                    return f"[CRAWL_ERROR] 无法访问该网站 ({str(e_req)[:50]})"
+
+            if resp.status_code != 200:
+                if resp.status_code in [403, 405, 401]:
+                    return f"[CRAWL_ERROR] 网站拒绝访问 (HTTP {resp.status_code})"
+                if resp.status_code in [404, 500, 502, 504]:
+                    return f"[CRAWL_ERROR] 网页打不开或已失效 (HTTP {resp.status_code})"
+                return f"[CRAWL_ERROR] HTTP {resp.status_code}"
             
             soup = BeautifulSoup(resp.content, 'html.parser')
             text_bundle = f"=== 来源网址: {resp.url} ===\n"
