@@ -87,11 +87,18 @@ class Scraper:
         headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36'}
         try:
             resp = curl_requests.get(url, headers=headers, timeout=15, impersonate="chrome110", allow_redirects=True)
-            if resp.status_code != 200: return f"Error: HTTP {resp.status_code}"
+            if resp.status_code != 200: return f"[CRAWL_ERROR] HTTP {resp.status_code}"
             
             soup = BeautifulSoup(resp.content, 'html.parser')
             text_bundle = f"=== 来源网址: {resp.url} ===\n"
-            
+
+            # Extract contact info early and place at top
+            visible_text = soup.get_text()
+            emails = set(re.findall(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', visible_text))
+            phones = set(re.findall(r'400-\d{3}-\d{4}|400\d{7}|\+?86-?1[3-9]\d{9}|1[3-9]\d{9}|\d{3,4}-\d{7,8}|\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}', visible_text))
+            if emails or phones:
+                text_bundle += f"=== 原始联系信息 ===\n邮箱: {', '.join(emails)}\n电话: {', '.join(phones)}\n\n"
+
             main_text = trafilatura.extract(resp.content)
             if main_text and len(main_text) > 200:
                 text_bundle += main_text
@@ -99,19 +106,14 @@ class Scraper:
                 content_parts = [tag.get_text(strip=True) for tag in soup.find_all(['h1', 'h2', 'h3', 'p', 'article']) if len(tag.get_text(strip=True)) > 10]
                 text_bundle += "\n".join(content_parts[:40])
             
-            emails = set(re.findall(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', resp.text))
-            phones = set(re.findall(r'1[3-9]\d{9}|\d{3,4}-\d{7,8}|\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}', resp.text))
-            if emails or phones:
-                text_bundle += f"\n\n=== 原始联系信息 ===\n邮箱: {', '.join(emails)}\n电话: {', '.join(phones)}\n"
-            
             if depth > 1:
                 sub_links = []
                 for a in soup.find_all('a', href=True):
                     t = a.get_text()
-                    if any(kw in t for kw in ['About', 'Contact', 'Project', '关于', '联系', '项目']):
+                    if any(kw in t for kw in ['About', 'Contact', 'Project', 'Products', 'Cases', 'Services', '关于', '联系', '项目', '产品', '案例', '工程', '合作', '服务']):
                         sub_links.append(urljoin(resp.url, a['href']))
                 
-                for sub_url in list(set(sub_links))[:depth-1]:
+                for sub_url in list(set(sub_links))[:3]:
                     try:
                         sub_resp = curl_requests.get(sub_url, headers=headers, timeout=8, impersonate="chrome110")
                         sub_text = trafilatura.extract(sub_resp.content) or sub_resp.text[:500]
@@ -119,22 +121,53 @@ class Scraper:
                     except: continue
                     
             return text_bundle
-        except Exception as e: return f"抓取错误: {e}"
+        except Exception as e: return f"[CRAWL_ERROR] 抓取错误: {e}"
 
 class AIBrain:
     def __init__(self, provider: str, api_key: str, model_name: str, base_url: Optional[str] = None):
         self.provider, self.api_key, self.model_name, self.base_url = provider, api_key, model_name, base_url
 
     def analyze(self, text: str, persona: str, focus: str) -> Dict:
-        prompt = f"你是一位{persona}。任务：分析以下网站内容。重点：{focus}\n要求 JSON 返回：{{'company_name': '...', 'email': '...', 'phone': '...', 'relevance_score': 0-10, 'deal_score': 0-10, 'summary': '...', 'why': '...'}}\n内容: {text[:8000]}"
+        system_prompt = (
+            f"你是一位{persona}，专门负责为地板行业寻找高价值商业线索。\n"
+            f"分析重点：{focus}\n\n"
+            "## 评分标准\n"
+            "deal_score（成交潜力）：\n"
+            "  8-10 = 直接地板相关企业，有明确联系方式\n"
+            "  5-7 = 相关行业（建材、装修），可能有合作机会\n"
+            "  3-4 = 间接相关，线索价值低\n"
+            "  0-2 = 完全无关\n\n"
+            "relevance_score（行业相关度）：\n"
+            "  8-10 = 核心地板业务\n"
+            "  5-7 = 邻近行业（建筑、房地产、装修）\n"
+            "  0-4 = 无关行业\n\n"
+            "## 示例\n"
+            "输入：上海XX地板有限公司，主营实木地板批发，联系电话 021-55551234，邮箱 sales@xxfloor.com\n"
+            "输出：{\"company_name\": \"上海XX地板有限公司\", \"email\": \"sales@xxfloor.com\", "
+            "\"phone\": \"021-55551234\", \"relevance_score\": 9, \"deal_score\": 9, "
+            "\"summary\": \"实木地板批发商，有完整联系方式\", \"why\": \"核心地板批发业务，直接联系方式齐全，高价值线索\"}\n\n"
+            "## 要求\n"
+            "返回严格 JSON 格式：{\"company_name\": \"\", \"email\": \"\", \"phone\": \"\", "
+            "\"relevance_score\": 0-10, \"deal_score\": 0-10, \"summary\": \"\", \"why\": \"\"}\n"
+            "如果找不到公司名称，company_name 填空字符串。"
+        )
+        user_prompt = f"请分析以下网站内容并返回 JSON：\n\n{text[:8000]}"
         try:
             if self.provider == "Gemini":
                 client = genai.Client(api_key=self.api_key)
-                response = client.models.generate_content(model=self.model_name, contents=prompt, config={'response_mime_type': 'application/json'})
+                combined_prompt = system_prompt + "\n\n" + user_prompt
+                response = client.models.generate_content(model=self.model_name, contents=combined_prompt, config={'response_mime_type': 'application/json'})
                 return json.loads(response.text)
             elif self.provider in ["DeepSeek", "OpenAI", "Custom"]:
                 client = OpenAI(api_key=self.api_key, base_url=self.base_url)
-                response = client.chat.completions.create(model=self.model_name, messages=[{"role": "user", "content": prompt}], response_format={"type": "json_object"})
+                response = client.chat.completions.create(
+                    model=self.model_name,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt}
+                    ],
+                    response_format={"type": "json_object"}
+                )
                 return json.loads(response.choices[0].message.content)
         except Exception as e: return {"error": str(e)}
 
@@ -158,10 +191,29 @@ with st.sidebar:
     st.divider()
     st.header("⚙️ AI 分析设置")
     provider = st.selectbox("AI 服务商", ["DeepSeek", "Gemini", "OpenAI"])
-    default_key = "sk-342ff1ad8a9b4223bb01937fc1cf7338" if provider == "DeepSeek" else ""
+    
+    # 动态设置默认值
+    if provider == "DeepSeek":
+        default_key = "sk-342ff1ad8a9b4223bb01937fc1cf7338"
+        default_model = "deepseek-chat"
+        default_url = "https://api.deepseek.com"
+    elif provider == "Gemini":
+        default_key = ""
+        default_model = "gemini-2.0-flash"
+        default_url = ""
+    else: # OpenAI
+        default_key = ""
+        default_model = "gpt-4o"
+        default_url = "https://api.openai.com/v1"
+
     ai_api_key = st.text_input("AI API Key", value=default_key, type="password")
-    custom_model = st.text_input("模型", value="deepseek-chat" if provider == "DeepSeek" else "gemini-2.0-flash")
-    base_url = "https://api.deepseek.com" if provider == "DeepSeek" else None
+    custom_model = st.text_input("模型", value=default_model)
+    
+    # 只有部分服务商显示 Base URL 选项
+    if provider in ["DeepSeek", "OpenAI"]:
+        base_url = st.text_input("Base URL (选填)", value=default_url)
+    else:
+        base_url = None
     
     st.divider()
     max_results = st.slider("搜索结果数量", 5, 50, 10)
@@ -194,29 +246,51 @@ if st.button("🚀 开始自动化拓客任务", use_container_width=True):
             status.update(label=f"搜索完成！发现 {len(urls)} 个高价值目标。", state="complete" if urls else "error")
         
         if urls:
+            # Deduplicate by domain (keep first occurrence)
+            seen_domains = set()
+            unique_urls = []
+            for u in urls:
+                domain = urlparse(u).netloc
+                if domain not in seen_domains:
+                    seen_domains.add(domain)
+                    unique_urls.append(u)
+            urls = unique_urls
+
             with st.expander("🛠️ 调试: 搜索到的原始 URL 列表"):
                 for i, u in enumerate(urls): st.write(f"{i+1}. {u}")
 
             st.divider()
             leads_data, log_container, log_messages = [], st.empty(), []
             progress_bar, brain = st.progress(0), AIBrain(provider, ai_api_key, custom_model, base_url)
-            
+
             for i, url in enumerate(urls):
                 log_messages.append(f"🔍 分析中 ({i+1}/{len(urls)}): {url[:40]}...")
                 log_container.code("\n".join(log_messages[-3:]))
-                
+
                 context = Scraper.get_deep_context(url, depth=crawl_depth)
                 if show_raw:
                     with st.expander(f"原文: {url}"): st.text(context)
-                
-                if context and "Error" not in context and len(context) > 200:
+
+                if context and not context.startswith("[CRAWL_ERROR]") and len(context) > 200:
                     analysis = brain.analyze(context, INDUSTRY_PRESETS[industry]["persona"], INDUSTRY_PRESETS[industry]["focus"])
                     if "error" not in analysis:
+                        # Safe score parsing
+                        try:
+                            deal_score = int(float(analysis.get('deal_score', 0)))
+                            relevance_score = int(float(analysis.get('relevance_score', 0)))
+                        except (ValueError, TypeError):
+                            deal_score, relevance_score = 0, 0
+
+                        # Skip if no company name
+                        company_name = analysis.get('company_name', '').strip()
+                        if not company_name:
+                            continue
+
                         analysis['url'] = url
-                        if int(analysis.get('deal_score', 0)) > 2:
+                        if deal_score > 2 and relevance_score >= 4:
                             leads_data.append(analysis)
-                            st.success(f"💎 成功识别: **{analysis.get('company_name')}** (潜力评分: {analysis.get('deal_score')}/10)")
-                
+                            st.success(f"💎 成功识别: **{company_name}** (潜力评分: {deal_score}/10)")
+
                 progress_bar.progress((i + 1) / len(urls))
                 time.sleep(random.uniform(0.3, 1.0))
 
