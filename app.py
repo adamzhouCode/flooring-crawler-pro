@@ -304,12 +304,12 @@ class AIBrain:
 
 # --- UI ---
 
-st.set_page_config(page_title="地板爬虫", layout="wide", page_icon="�")
+st.set_page_config(page_title="地板爬虫", layout="wide", page_icon="🎯")
 
 if not check_password():
     st.stop()
 
-st.title("� 地板爬虫：专业智能拓客引擎")
+st.title("🎯 地板爬虫：专业智能拓客引擎")
 
 with st.sidebar:
     st.header("⚙️ 搜索配置")
@@ -486,9 +486,10 @@ if st.button("🚀 开始自动化拓客任务", use_container_width=True):
 
                 company_name = analysis.get('company_name', '').strip()
                 if not company_name:
+                    # Fallback: use domain as company name
+                    company_name = urlparse(r['url']).netloc.lstrip('www.')
+                    analysis['company_name'] = company_name
                     funnel["no_name"] += 1
-                    skipped_details.append({"url": r["url"], "reason": "AI未识别公司名"})
-                    continue
 
                 # Company-name-level dedup
                 name_key = company_name.lower().replace(' ', '')
