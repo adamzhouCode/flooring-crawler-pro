@@ -419,7 +419,7 @@ if st.button("🚀 开始自动化拓客任务", use_container_width=True):
     else:
         with st.status(f"正在通过 {engine_choice} 搜索...") as status:
             # Over-fetch 3x to compensate for filtering losses
-            fetch_count = min(max_results * 3, 100)
+            fetch_count = max_results
             if engine_choice == "Serper (首选)":
                 raw_urls = SearchEngine.search_serper(final_query, serper_api_key, fetch_count)
             elif engine_choice == "Google CSE":
