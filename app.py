@@ -5,6 +5,8 @@ import time
 import os
 import re
 import random
+import threading
+from datetime import datetime
 from typing import List, Dict, Optional
 from urllib.parse import urljoin, urlparse
 
@@ -20,6 +22,38 @@ from openai import OpenAI
 from dotenv import load_dotenv
 
 load_dotenv()
+
+def get_secret(key: str, default: str = "") -> str:
+    """Helper to get secret from streamlit secrets or env vars"""
+    try:
+        if key in st.secrets:
+            return st.secrets[key]
+    except:
+        pass
+    return os.getenv(key, default)
+
+def check_password():
+    """Returns True if the user had the correct password."""
+    def password_entered():
+        """Checks whether a password entered by the user is correct."""
+        if st.session_state["password"] == get_secret("APP_PASSWORD", "admin123"):
+            st.session_state["password_correct"] = True
+            del st.session_state["password"]  # don't store password
+        else:
+            st.session_state["password_correct"] = False
+
+    if "password_correct" not in st.session_state:
+        # First run, show input for password.
+        st.text_input("登录密码", type="password", on_change=password_entered, key="password")
+        return False
+    elif not st.session_state["password_correct"]:
+        # Password incorrect, show input + error.
+        st.text_input("登录密码", type="password", on_change=password_entered, key="password")
+        st.error("😕 密码错误")
+        return False
+    else:
+        # Password correct.
+        return True
 
 # --- 行业预设配置 (INDUSTRY PRESETS) ---
 INDUSTRY_PRESETS = {
@@ -46,6 +80,31 @@ INDUSTRY_PRESETS = {
 }
 
 # --- 核心引擎类 ---
+
+class GlobalRateLimiter:
+    def __init__(self, daily_limit: int = 500):
+        self.lock = threading.Lock()
+        self.daily_limit = daily_limit
+        self.count = 0
+        self.date = datetime.now().date()
+
+    def check(self) -> bool:
+        with self.lock:
+            current_date = datetime.now().date()
+            if current_date > self.date:
+                self.count = 0
+                self.date = current_date
+            if self.count >= self.daily_limit:
+                return False
+            self.count += 1
+            return True
+
+    def get_status(self):
+        return self.count, self.daily_limit
+
+@st.cache_resource
+def get_limiter():
+    return GlobalRateLimiter(daily_limit=10)
 
 class SearchEngine:
     @staticmethod
@@ -174,6 +233,10 @@ class AIBrain:
 # --- UI ---
 
 st.set_page_config(page_title="精工铺地 Pro", layout="wide", page_icon="🏗️")
+
+if not check_password():
+    st.stop()
+
 st.title("🏗️ 精工铺地 Pro：专业拓客引擎")
 
 with st.sidebar:
@@ -181,11 +244,11 @@ with st.sidebar:
     engine_choice = st.selectbox("搜索引擎", ["Google Search API (首选)", "Brave API"])
     
     if engine_choice == "Google Search API (首选)":
-        google_api_key = st.text_input("Google API Key", type="password")
-        google_cx = st.text_input("Search Engine ID (CX)", type="password")
+        google_api_key = st.text_input("Google API Key", value=get_secret("GOOGLE_API_KEY"), type="password")
+        google_cx = st.text_input("Search Engine ID (CX)", value=get_secret("GOOGLE_CX"), type="password")
         
     else:
-        search_api_key = st.text_input("Brave API Key", type="password")
+        search_api_key = st.text_input("Brave API Key", value=get_secret("BRAVE_API_KEY"), type="password")
         st.caption("[获取 Brave API 密钥](https://api.search.brave.com/)")
     
     st.divider()
@@ -194,15 +257,15 @@ with st.sidebar:
     
     # 动态设置默认值
     if provider == "DeepSeek":
-        default_key = "sk-342ff1ad8a9b4223bb01937fc1cf7338"
+        default_key = get_secret("DEEPSEEK_API_KEY")
         default_model = "deepseek-chat"
         default_url = "https://api.deepseek.com"
     elif provider == "Gemini":
-        default_key = ""
+        default_key = get_secret("GEMINI_API_KEY", get_secret("GOOGLE_AI_API_KEY"))
         default_model = "gemini-2.0-flash"
         default_url = ""
     else: # OpenAI
-        default_key = ""
+        default_key = get_secret("OPENAI_API_KEY")
         default_model = "gpt-4o"
         default_url = "https://api.openai.com/v1"
 
@@ -230,7 +293,10 @@ with col2:
     st.info(f"搜索指令: {final_query}")
 
 if st.button("🚀 开始自动化拓客任务", use_container_width=True):
-    if not ai_api_key:
+    limiter = get_limiter()
+    if not limiter.check():
+        st.error(f"❌ 已达到当日全局搜索上限 ({limiter.daily_limit})。请明天再试或联系管理员。")
+    elif not ai_api_key:
         st.error("请输入 AI API 密钥。")
     elif engine_choice == "Google Search API (首选)" and (not google_api_key or not google_cx):
         st.error("请完整填写 Google API Key 和 CX ID。")
