@@ -59,29 +59,29 @@ def check_password():
 # --- 行业预设配置 (INDUSTRY PRESETS) ---
 INDUSTRY_PRESETS = {
     "地板品牌/经销商 (Brand & Distributors)": {
-        "query": '"{city}" 地板 (经销 OR 代理 OR 批发) 联系 -工厂 -生产线 -制造 -1688.com -alibaba.com',
+        "query": '"{city}" 地板经销商 代理 联系电话 -工厂 -制造 -1688.com -alibaba.com',
         "persona": "高级采购经理",
-        "focus": "寻找位于{city}的地板品牌商和经销商（非生产工厂）。关注：代理的品牌、经销区域、批发能力、联系方式。排除：地板生产工厂、制造商（这些是我们的竞争对手）。注意：必须是{city}本地企业，非{city}的企业请标低分。"
+        "focus": "寻找位于{city}的地板品牌商和经销商（非生产工厂）。关注：代理的品牌、经销区域、批发能力、联系方式。排除：地板生产工厂、制造商（这些是我们的竞争对手）。【重要】该企业必须位于或服务于{city}，如果企业明确属于其他城市/省份，relevance_score 必须 ≤ 3。"
     },
     "地板零售/门店 (Retailers)": {
-        "query": '"{city}" 地板 (专卖店 OR 建材市场 OR 展厅) 地址 电话 -工厂 -生产',
+        "query": '"{city}" 地板专卖店 展厅 地址 电话 -工厂 -生产',
         "persona": "客户经理",
-        "focus": "寻找位于{city}的独立地板零售门店或建材市场中的地板商户。关注：经营品牌、门店地址、联系方式。评估其引入新品牌的意愿。排除：地板工厂直营店。注意：必须是{city}本地门店，非{city}的请标低分。"
+        "focus": "寻找位于{city}的独立地板零售门店或建材市场中的地板商户。关注：经营品牌、门店地址、联系方式。评估其引入新品牌的意愿。排除：地板工厂直营店。【重要】门店必须位于{city}，如果明确属于其他城市/省份，relevance_score 必须 ≤ 3。"
     },
     "房地产开发商 (Developers)": {
-        "query": '"{city}" (房地产开发 OR 地产集团) (在建项目 OR 楼盘) 官网 联系',
+        "query": '"{city}" 房地产开发 楼盘 精装修 联系 官网',
         "persona": "供应链管理专家",
-        "focus": "寻找在{city}有在建或规划住宅/商业项目的房地产开发商。关注：项目规模、精装修楼盘（需要集采地板）、采购部联系方式。注意：必须在{city}有项目，非{city}的请标低分。"
+        "focus": "寻找在{city}有在建或规划住宅/商业项目的房地产开发商。关注：项目规模、精装修楼盘（需要集采地板）、采购部联系方式。【重要】项目必须位于{city}，如果明确属于其他城市/省份，relevance_score 必须 ≤ 3。"
     },
     "装饰/设计公司 (Design & Decoration)": {
-        "query": '"{city}" (装饰公司 OR 设计公司) (精装修 OR 室内装修) 工程案例 联系 -工厂',
+        "query": '"{city}" 装饰工程公司 精装修 案例 联系 -地板厂',
         "persona": "合作伙伴经理",
-        "focus": "寻找位于{city}的承接精装修项目的装饰设计公司（非地板工厂）。关注：项目案例中是否涉及地板选材、合作品牌、项目规模和合作联系方式。注意：必须是{city}本地企业，非{city}的请标低分。"
+        "focus": "寻找位于{city}的承接精装修项目的装饰设计公司（非地板工厂）。关注：项目案例中是否涉及地板选材、合作品牌、项目规模和合作联系方式。【重要】企业必须位于{city}，如果明确属于其他城市/省份，relevance_score 必须 ≤ 3。"
     },
     "建筑工程/施工 (Contractors)": {
-        "query": '"{city}" 装饰工程公司 (地面铺装 OR 地板安装) 承接工程 联系 -地板厂',
+        "query": '"{city}" 装饰工程 地板铺装 安装 承接 联系 -地板厂',
         "persona": "项目合作经理",
-        "focus": "寻找位于{city}的承接地面铺装工程的施工企业（非地板生产商）。关注：工程资质、过往项目规模、材料采购渠道和联系方式。注意：必须是{city}本地企业，非{city}的请标低分。"
+        "focus": "寻找位于{city}的承接地面铺装工程的施工企业（非地板生产商）。关注：工程资质、过往项目规模、材料采购渠道和联系方式。【重要】企业必须位于{city}，如果明确属于其他城市/省份，relevance_score 必须 ≤ 3。"
     }
 }
 
@@ -346,10 +346,16 @@ if st.button("🚀 开始自动化拓客任务", use_container_width=True):
             def process_url(url):
                 """Scrape and analyze a single URL (runs in thread)"""
                 context = Scraper.get_deep_context(url, depth=crawl_depth)
-                result = {"url": url, "context": context, "analysis": None}
-                if context and not context.startswith("[CRAWL_ERROR]") and len(context) > 200:
+                result = {"url": url, "context": context, "analysis": None, "skip_reason": None}
+                if not context or context.startswith("[CRAWL_ERROR]"):
+                    result["skip_reason"] = "抓取失败"
+                elif len(context) <= 200:
+                    result["skip_reason"] = "内容过短"
+                else:
                     analysis = brain.analyze(context, persona, focus)
-                    if "error" not in analysis:
+                    if "error" in analysis:
+                        result["skip_reason"] = f"AI分析失败: {analysis.get('error', '')[:60]}"
+                    else:
                         result["analysis"] = analysis
                 return result
 
@@ -369,28 +375,49 @@ if st.button("🚀 开始自动化拓客任务", use_container_width=True):
             # Filter and store results in session_state
             leads_data = []
             raw_contexts = []
+            funnel = {"total": len(urls), "crawl_fail": 0, "too_short": 0, "ai_fail": 0, "no_name": 0, "low_score": 0, "accepted": 0}
+            skipped_details = []
+
             for r in results:
                 raw_contexts.append({"url": r["url"], "context": r["context"]})
+
+                if r["skip_reason"]:
+                    if "抓取失败" in r["skip_reason"]:
+                        funnel["crawl_fail"] += 1
+                    elif "内容过短" in r["skip_reason"]:
+                        funnel["too_short"] += 1
+                    else:
+                        funnel["ai_fail"] += 1
+                    skipped_details.append({"url": r["url"], "reason": r["skip_reason"]})
+                    continue
+
                 analysis = r["analysis"]
-                if analysis:
-                    try:
-                        deal_score = int(float(analysis.get('deal_score', 0)))
-                        relevance_score = int(float(analysis.get('relevance_score', 0)))
-                    except (ValueError, TypeError):
-                        deal_score, relevance_score = 0, 0
+                try:
+                    deal_score = int(float(analysis.get('deal_score', 0)))
+                    relevance_score = int(float(analysis.get('relevance_score', 0)))
+                except (ValueError, TypeError):
+                    deal_score, relevance_score = 0, 0
 
-                    company_name = analysis.get('company_name', '').strip()
-                    if not company_name:
-                        continue
+                company_name = analysis.get('company_name', '').strip()
+                if not company_name:
+                    funnel["no_name"] += 1
+                    skipped_details.append({"url": r["url"], "reason": "AI未识别公司名"})
+                    continue
 
-                    analysis['url'] = r['url']
-                    if deal_score > 2 and relevance_score >= 4:
-                        leads_data.append(analysis)
+                analysis['url'] = r['url']
+                if deal_score > 2 and relevance_score >= 4:
+                    funnel["accepted"] += 1
+                    leads_data.append(analysis)
+                else:
+                    funnel["low_score"] += 1
+                    skipped_details.append({"url": r["url"], "reason": f"评分过低 (deal={deal_score}, relevance={relevance_score})"})
 
             st.session_state["leads_data"] = leads_data
             st.session_state["raw_contexts"] = raw_contexts
             st.session_state["search_urls"] = urls
             st.session_state["result_city"] = city
+            st.session_state["funnel"] = funnel
+            st.session_state["skipped_details"] = skipped_details
             st.rerun()
 
 # --- Display persisted results ---
@@ -399,6 +426,22 @@ if "leads_data" in st.session_state:
     leads_data = st.session_state["leads_data"]
     raw_contexts = st.session_state["raw_contexts"]
     result_city = st.session_state["result_city"]
+
+    # Diagnostic funnel
+    if "funnel" in st.session_state:
+        f = st.session_state["funnel"]
+        with st.expander(f"📊 分析漏斗: {f['total']} 个 URL → {f['accepted']} 个有效线索"):
+            col_a, col_b, col_c, col_d, col_e = st.columns(5)
+            col_a.metric("抓取失败", f["crawl_fail"])
+            col_b.metric("内容过短", f["too_short"])
+            col_c.metric("AI分析失败", f["ai_fail"])
+            col_d.metric("无公司名", f["no_name"])
+            col_e.metric("评分过低", f["low_score"])
+
+            if st.session_state.get("skipped_details"):
+                st.caption("被过滤的 URL:")
+                for s in st.session_state["skipped_details"]:
+                    st.text(f"  {s['reason']}: {s['url'][:80]}")
 
     with st.expander(f"🛠️ 调试: 搜索到的 URL 列表 ({len(urls)} 个)"):
         for i, u in enumerate(urls): st.write(f"{i+1}. {u}")
@@ -426,6 +469,6 @@ if "leads_data" in st.session_state:
         st.error("未发现有效线索。")
 
     if st.button("🗑️ 清除结果", use_container_width=True):
-        for key in ["leads_data", "raw_contexts", "search_urls", "result_city"]:
+        for key in ["leads_data", "raw_contexts", "search_urls", "result_city", "funnel", "skipped_details"]:
             st.session_state.pop(key, None)
         st.rerun()
