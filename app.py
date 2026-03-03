@@ -342,7 +342,6 @@ with st.sidebar:
 
     if engine_choice == "Serper (首选)":
         serper_api_key = st.text_input("Serper API Key", value=get_secret("SERPER_API_KEY"), type="password")
-        st.caption("[免费注册 Serper (2500次/月)](https://serper.dev/)")
     elif engine_choice == "Google CSE":
         google_api_key = st.text_input("Google API Key", value=get_secret("GOOGLE_API_KEY"), type="password")
         google_cx = st.text_input("Search Engine ID (CX)", value=get_secret("GOOGLE_CX"), type="password")
