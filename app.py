@@ -6,6 +6,7 @@ import os
 import re
 import random
 import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from typing import List, Dict, Optional
 from urllib.parse import urljoin, urlparse
@@ -340,39 +341,57 @@ if st.button("🚀 开始自动化拓客任务", use_container_width=True):
                 for i, u in enumerate(urls): st.write(f"{i+1}. {u}")
 
             st.divider()
-            leads_data, log_container, log_messages = [], st.empty(), []
-            progress_bar, brain = st.progress(0), AIBrain(provider, ai_api_key, custom_model, base_url)
+            brain = AIBrain(provider, ai_api_key, custom_model, base_url)
+            persona = INDUSTRY_PRESETS[industry]["persona"]
+            focus = INDUSTRY_PRESETS[industry]["focus"]
+            progress_bar = st.progress(0, text=f"并行分析中... 0/{len(urls)}")
+            status_text = st.empty()
 
-            for i, url in enumerate(urls):
-                log_messages.append(f"🔍 分析中 ({i+1}/{len(urls)}): {url[:40]}...")
-                log_container.code("\n".join(log_messages[-3:]))
-
+            def process_url(url):
+                """Scrape and analyze a single URL (runs in thread)"""
                 context = Scraper.get_deep_context(url, depth=crawl_depth)
-                if show_raw:
-                    with st.expander(f"原文: {url}"): st.text(context)
-
+                result = {"url": url, "context": context, "analysis": None}
                 if context and not context.startswith("[CRAWL_ERROR]") and len(context) > 200:
-                    analysis = brain.analyze(context, INDUSTRY_PRESETS[industry]["persona"], INDUSTRY_PRESETS[industry]["focus"])
+                    analysis = brain.analyze(context, persona, focus)
                     if "error" not in analysis:
-                        # Safe score parsing
-                        try:
-                            deal_score = int(float(analysis.get('deal_score', 0)))
-                            relevance_score = int(float(analysis.get('relevance_score', 0)))
-                        except (ValueError, TypeError):
-                            deal_score, relevance_score = 0, 0
+                        result["analysis"] = analysis
+                return result
 
-                        # Skip if no company name
-                        company_name = analysis.get('company_name', '').strip()
-                        if not company_name:
-                            continue
+            # Run scraping + AI analysis in parallel (5 workers)
+            max_workers = min(5, len(urls))
+            results = []
+            completed = 0
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                futures = {executor.submit(process_url, url): url for url in urls}
+                for future in as_completed(futures):
+                    results.append(future.result())
+                    completed += 1
+                    progress_bar.progress(completed / len(urls), text=f"并行分析中... {completed}/{len(urls)}")
 
-                        analysis['url'] = url
-                        if deal_score > 2 and relevance_score >= 4:
-                            leads_data.append(analysis)
-                            st.success(f"💎 成功识别: **{company_name}** (潜力评分: {deal_score}/10)")
+            progress_bar.progress(1.0, text="分析完成!")
 
-                progress_bar.progress((i + 1) / len(urls))
-                time.sleep(random.uniform(0.3, 1.0))
+            # Process results on main thread (for Streamlit UI updates)
+            leads_data = []
+            for r in results:
+                if show_raw and r["context"]:
+                    with st.expander(f"原文: {r['url']}"): st.text(r["context"])
+
+                analysis = r["analysis"]
+                if analysis:
+                    try:
+                        deal_score = int(float(analysis.get('deal_score', 0)))
+                        relevance_score = int(float(analysis.get('relevance_score', 0)))
+                    except (ValueError, TypeError):
+                        deal_score, relevance_score = 0, 0
+
+                    company_name = analysis.get('company_name', '').strip()
+                    if not company_name:
+                        continue
+
+                    analysis['url'] = r['url']
+                    if deal_score > 2 and relevance_score >= 4:
+                        leads_data.append(analysis)
+                        st.success(f"💎 成功识别: **{company_name}** (潜力评分: {deal_score}/10)")
 
             if leads_data:
                 st.divider()
