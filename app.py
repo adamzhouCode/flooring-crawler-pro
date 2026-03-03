@@ -59,27 +59,27 @@ def check_password():
 # --- 行业预设配置 (INDUSTRY PRESETS) ---
 INDUSTRY_PRESETS = {
     "地板品牌/经销商 (Brand & Distributors)": {
-        "query": '"{city}地板经销" OR "{city}地板代理" OR "{city}地板批发" 联系电话 -工厂 -制造 -1688.com -alibaba.com',
+        "query": '"{city}" "地板" 经销商 OR 代理商 OR 批发 -工厂 -制造 -1688.com -alibaba.com',
         "persona": "高级采购经理",
         "focus": "寻找位于{city}的地板品牌商和经销商（非生产工厂）。关注：代理的品牌、经销区域、批发能力、联系方式。排除：地板生产工厂、制造商（这些是我们的竞争对手）。【重要】该企业必须位于或服务于{city}，如果企业明确属于其他城市/省份，relevance_score 必须 ≤ 3。"
     },
     "地板零售/门店 (Retailers)": {
-        "query": '"{city}地板" 专卖店 OR 建材市场 OR 展厅 地址 电话 -工厂 -生产',
+        "query": '"{city}" "地板" 专卖店 OR 建材市场 OR 门店 -工厂 -生产 -1688.com',
         "persona": "客户经理",
         "focus": "寻找位于{city}的独立地板零售门店或建材市场中的地板商户。关注：经营品牌、门店地址、联系方式。评估其引入新品牌的意愿。排除：地板工厂直营店。【重要】门店必须位于{city}，如果明确属于其他城市/省份，relevance_score 必须 ≤ 3。"
     },
     "房地产开发商 (Developers)": {
-        "query": '"{city}" 房地产开发 精装修楼盘 地板采购 联系',
+        "query": '"{city}" 房地产 开发商 精装修 OR 楼盘 -1688.com',
         "persona": "供应链管理专家",
         "focus": "寻找在{city}有在建或规划住宅/商业项目的房地产开发商。关注：项目规模、精装修楼盘（需要集采地板）、采购部联系方式。【重要】项目必须位于{city}，如果明确属于其他城市/省份，relevance_score 必须 ≤ 3。"
     },
     "装饰/设计公司 (Design & Decoration)": {
-        "query": '"{city}" 装饰公司 地板 OR 木地板 OR 地面材料 工程案例 联系 -地板厂',
+        "query": '"{city}" "装饰" OR "装修" 公司 地板 OR 地面 -地板厂 -1688.com',
         "persona": "合作伙伴经理",
         "focus": "寻找位于{city}的承接精装修项目的装饰设计公司（非地板工厂）。关注：项目案例中是否涉及地板选材、合作品牌、项目规模和合作联系方式。【重要】企业必须位于{city}，如果明确属于其他城市/省份，relevance_score 必须 ≤ 3。"
     },
     "建筑工程/施工 (Contractors)": {
-        "query": '"{city}" 地板铺装 OR 地板安装 OR 地面工程 承接 联系 -地板厂',
+        "query": '"{city}" 地板 铺装 OR 安装 OR 施工 工程 -地板厂 -1688.com',
         "persona": "项目合作经理",
         "focus": "寻找位于{city}的承接地面铺装工程的施工企业（非地板生产商）。关注：工程资质、过往项目规模、材料采购渠道和联系方式。【重要】企业必须位于{city}，如果明确属于其他城市/省份，relevance_score 必须 ≤ 3。"
     }
