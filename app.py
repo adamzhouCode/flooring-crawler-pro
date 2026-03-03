@@ -59,29 +59,29 @@ def check_password():
 # --- 行业预设配置 (INDUSTRY PRESETS) ---
 INDUSTRY_PRESETS = {
     "地板品牌/经销商 (Brand & Distributors)": {
-        "query": '"{city}" 地板 品牌 经销 OR 代理 OR 批发 联系 -工厂 -生产线 -制造 -1688.com -alibaba.com',
+        "query": '"{city}" 地板 (经销 OR 代理 OR 批发) 联系 -工厂 -生产线 -制造 -1688.com -alibaba.com',
         "persona": "高级采购经理",
-        "focus": "寻找地板品牌商和经销商（非生产工厂）。关注：代理的品牌、经销区域、批发能力、联系方式。排除：地板生产工厂、制造商（这些是我们的竞争对手）。"
+        "focus": "寻找位于{city}的地板品牌商和经销商（非生产工厂）。关注：代理的品牌、经销区域、批发能力、联系方式。排除：地板生产工厂、制造商（这些是我们的竞争对手）。注意：必须是{city}本地企业，非{city}的企业请标低分。"
     },
     "地板零售/门店 (Retailers)": {
-        "query": '"{city}" 地板 专卖店 OR 建材市场 OR 展厅 品牌 地址 电话 -工厂 -生产',
+        "query": '"{city}" 地板 (专卖店 OR 建材市场 OR 展厅) 地址 电话 -工厂 -生产',
         "persona": "客户经理",
-        "focus": "寻找独立地板零售门店或建材市场中的地板商户。关注：经营品牌、门店地址、联系方式。评估其引入新品牌的意愿。排除：地板工厂直营店。"
+        "focus": "寻找位于{city}的独立地板零售门店或建材市场中的地板商户。关注：经营品牌、门店地址、联系方式。评估其引入新品牌的意愿。排除：地板工厂直营店。注意：必须是{city}本地门店，非{city}的请标低分。"
     },
     "房地产开发商 (Developers)": {
-        "query": '"{city}" 房地产开发 OR 地产集团 在建项目 OR 楼盘 官网 联系',
+        "query": '"{city}" (房地产开发 OR 地产集团) (在建项目 OR 楼盘) 官网 联系',
         "persona": "供应链管理专家",
-        "focus": "寻找有在建或规划住宅/商业项目的房地产开发商。关注：项目规模、精装修楼盘（需要集采地板）、采购部联系方式。"
+        "focus": "寻找在{city}有在建或规划住宅/商业项目的房地产开发商。关注：项目规模、精装修楼盘（需要集采地板）、采购部联系方式。注意：必须在{city}有项目，非{city}的请标低分。"
     },
     "装饰/设计公司 (Design & Decoration)": {
-        "query": '"{city}" 装饰公司 OR 设计公司 精装修 OR 室内装修 工程案例 联系 -工厂',
+        "query": '"{city}" (装饰公司 OR 设计公司) (精装修 OR 室内装修) 工程案例 联系 -工厂',
         "persona": "合作伙伴经理",
-        "focus": "寻找承接精装修项目的装饰设计公司（非地板工厂）。关注：项目案例中是否涉及地板选材、合作品牌、项目规模和合作联系方式。"
+        "focus": "寻找位于{city}的承接精装修项目的装饰设计公司（非地板工厂）。关注：项目案例中是否涉及地板选材、合作品牌、项目规模和合作联系方式。注意：必须是{city}本地企业，非{city}的请标低分。"
     },
     "建筑工程/施工 (Contractors)": {
-        "query": '"{city}" 装饰工程公司 地面铺装 OR 地板安装 承接工程 联系 -地板厂',
+        "query": '"{city}" 装饰工程公司 (地面铺装 OR 地板安装) 承接工程 联系 -地板厂',
         "persona": "项目合作经理",
-        "focus": "寻找承接地面铺装工程的施工企业（非地板生产商）。关注：工程资质、过往项目规模、材料采购渠道和联系方式。"
+        "focus": "寻找位于{city}的承接地面铺装工程的施工企业（非地板生产商）。关注：工程资质、过往项目规模、材料采购渠道和联系方式。注意：必须是{city}本地企业，非{city}的请标低分。"
     }
 }
 
@@ -340,7 +340,7 @@ if st.button("🚀 开始自动化拓客任务", use_container_width=True):
             st.divider()
             brain = AIBrain(provider, ai_api_key, custom_model, base_url)
             persona = INDUSTRY_PRESETS[industry]["persona"]
-            focus = INDUSTRY_PRESETS[industry]["focus"]
+            focus = INDUSTRY_PRESETS[industry]["focus"].format(city=city)
             progress_bar = st.progress(0, text=f"并行分析中... 0/{len(urls)}")
 
             def process_url(url):
