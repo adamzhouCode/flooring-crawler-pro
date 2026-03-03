@@ -64,69 +64,72 @@ def check_password():
 # --- 行业预设配置 (INDUSTRY PRESETS) ---
 INDUSTRY_PRESETS = {
     "地板经销商 (Distributors)": {
-        "queries": ['{city}地板经销商'],
+        "queries": ['"{city}" 地板 经销商 OR 代理商 OR 批发 OR 门店 -招聘 -工厂'],
         "persona": "高级采购经理",
         "focus": "寻找位于{city}的地板品牌商和经销商（非生产工厂）。关注：代理的品牌、经销区域、批发能力、联系方式。排除：地板生产工厂、制造商（这些是我们的竞争对手）。【重要】该企业必须位于或服务于{city}，如果企业明确属于其他城市/省份，relevance_score 必须 ≤ 3。"
     },
     "地板零售门店 (Retailers)": {
-        "queries": ['{city}地板专卖店'],
+        "queries": ['"{city}" 地板 专卖店 OR 门店 OR 体验店 OR 零售 -招聘 -工厂'],
         "persona": "客户经理",
         "focus": "寻找位于{city}的独立地板零售门店或建材市场中的地板商户。关注：经营品牌、门店地址、联系方式。评估其引入新品牌的意愿。排除：地板工厂直营店。【重要】门店必须位于{city}，如果明确属于其他城市/省份，relevance_score 必须 ≤ 3。"
     },
     "房地产开发商 (Developers)": {
-        "queries": ['{city}房地产开发商 精装修'],
+        "queries": ['"{city}" 房地产开发商 OR 房产集团 "精装修" OR "集采" -招聘'],
         "persona": "供应链管理专家",
         "focus": "寻找在{city}有在建或规划住宅/商业项目的房地产开发商。关注：项目规模、精装修楼盘（需要集采地板）、采购部联系方式。【重要】项目必须位于{city}，如果明确属于其他城市/省份，relevance_score 必须 ≤ 3。"
     },
     "装饰装修公司 (Decoration)": {
-        "queries": ['{city}装饰公司 地板'],
+        "queries": ['"{city}" 装饰公司 OR 装修公司 OR 公装公司 "地板" -招聘'],
         "persona": "合作伙伴经理",
         "focus": "寻找位于{city}的承接精装修项目的装饰公司（非地板工厂）。关注：项目案例中是否涉及地板选材、合作品牌、项目规模和合作联系方式。【重要】企业必须位于{city}，如果企业明确属于其他城市/省份，relevance_score 必须 ≤ 3。"
     },
     "室内设计公司 (Design)": {
-        "queries": ['{city}室内设计公司 地板'],
+        "queries": ['"{city}" 室内设计 OR 空间设计 "事务所" OR "公司" -招聘'],
         "persona": "合作伙伴经理",
         "focus": "寻找位于{city}的室内设计公司。关注：设计师是否在项目中指定地板品牌、设计风格偏好、合作联系方式。【重要】企业必须位于{city}，如果企业明确属于其他城市/省份，relevance_score 必须 ≤ 3。"
     },
     "地板施工安装 (Contractors)": {
-        "queries": ['{city}地板铺装 施工'],
+        "queries": ['"{city}" 地板 施工 OR 铺装 OR 安装 工程 -招聘'],
         "persona": "项目合作经理",
         "focus": "寻找位于{city}的承接地面铺装工程的施工企业（非地板生产商）。关注：工程资质、过往项目规模、材料采购渠道和联系方式。【重要】企业必须位于{city}，如果明确属于其他城市/省份，relevance_score 必须 ≤ 3。"
     }
 }
 
-# 行业关键词预筛（页面必须包含至少一个才送AI分析）
+# 行业关键词预筛（页面必须包含至少一个才送AI分析，放宽限制防止错杀）
 FLOORING_KEYWORDS = [
     # 地板核心
     '地板', '木地板', '地面', '地砖', '地材', '铺装', '建材', 'flooring', 'floor',
+    '瓷砖', '大理石', '家居', '软装', '全屋定制', '材料',
     # 装修装饰
-    '装修', '装饰', '精装',
+    '装修', '装饰', '精装', '公装', '家装',
     # 设计行业
     '室内设计', '空间设计', '设计公司', '设计事务所', '设计师', 'interior', 'design',
     # 房地产
-    '房地产', '楼盘', '开发商',
+    '房地产', '楼盘', '开发商', '地产', '建筑', '工程',
 ]
 
-# URL 过滤：模式匹配 + 黑名单（替代逐个域名打地鼠）
-# 域名中包含这些关键词的直接跳过（政府、新闻、门户、平台）
-SKIP_DOMAIN_PATTERNS = [
-    'gov.cn', '.gov.', 'news', 'baike', 'wiki',
+# URL 过滤：匹配确切后缀与黑名单（解决子串匹配错杀问题）
+SKIP_DOMAIN_SUFFIXES = [
+    '.gov.cn', '.gov', '.edu.cn', '.edu', '.org.cn', '.mil'
+]
+
+BLACKLISTED_DOMAINS = {
+    # 平台/社交/资讯类
     'zhihu.com', 'douban.com', 'bilibili.com', 'toutiao.com',
     'jianshu.com', 'csdn.net', 'weibo.com', 'qq.com',
-    'sohu.com', 'sina.com', '163.com', 'ifeng.com',
-    'baidu.com', 'map.baidu', 'tieba.baidu',
+    'sohu.com', 'sina.com', '163.com', 'ifeng.com', 'xinhuanet.com',
+    'baidu.com', 'map.baidu.com', 'tieba.baidu.com',
     'cnr.cn', 'cctv.com', 'people.com.cn',
-    'customs.gov', 'stats.gov',
-    # 社交媒体/内容平台
     'youtube.com', 'instagram.com', 'pinterest.com', 'linkedin.com',
     'facebook.com', 'twitter.com', 'x.com',
-    'douyin.com', 'iesdouyin.com', 'cnblogs.com',
-    # 招聘/排行/百科类
-    'jobui.com', 'cnpp.cn',
-]
-
-# 非企业官网的域名后缀/特征
-BLACKLISTED_DOMAINS = {
+    'douyin.com', 'iesdouyin.com', 'cnblogs.com', 'xiaohongshu.com',
+    # 招聘/黄页/百科/企业查询数据库
+    'jobui.com', 'cnpp.cn', 'zhaopin.com', '51job.com', 'zhipin.com', 'liepin.com',
+    'tianyancha.com', 'qcc.com', 'qichacha.com', '11467.com', 'kanzhun.com', 'xin.baidu.com',
+    'yellowpages.com', 'yelp.com', 'dianping.com', '58.com', 'ganji.com',
+    'aliexpress.com', 'taobao.com', 'jd.com', 'tmall.com', '1688.com',
+    'b2b168.com', 'hc360.com', 'made-in-china.com', 'alibaba.com',
+    # 具体杂项站点
     'bjnews.com.cn', 'chinafloor.cn', 'chinatimber.org', 'zhilengwang.cn',
     'shzh.net', 'zol.com.cn', '360che.com', 'pchouse.com.cn',
     'chery.cn', 'epson.com.cn', 'ciwf.com.cn',
@@ -135,12 +138,14 @@ BLACKLISTED_DOMAINS = {
 def is_url_blacklisted(url: str) -> bool:
     """Check if URL is from a non-business site (news, gov, portal, etc.)"""
     domain = urlparse(url).netloc.lstrip('www.').lower()
-    # Pattern matching — catches all gov.cn subdomains, news sites, etc.
-    if any(pat in domain for pat in SKIP_DOMAIN_PATTERNS):
+    
+    if any(domain.endswith(suf) for suf in SKIP_DOMAIN_SUFFIXES):
         return True
-    # Exact domain blacklist
+        
+    # Check exact domain or its subdomains (e.g., zhidao.baidu.com -> baidu.com)
     if any(domain == bd or domain.endswith('.' + bd) for bd in BLACKLISTED_DOMAINS):
         return True
+        
     return False
 
 # --- 核心引擎类 ---
@@ -284,24 +289,28 @@ class Scraper:
                 text_bundle += f"=== 原始联系信息 ===\n邮箱: {', '.join(emails)}\n电话: {', '.join(phones)}\n\n"
 
             main_text = trafilatura.extract(resp.content)
-            if main_text and len(main_text) > 200:
+            if main_text and len(main_text) > 50:
                 text_bundle += main_text
             else:
-                content_parts = [tag.get_text(strip=True) for tag in soup.find_all(['h1', 'h2', 'h3', 'p', 'article']) if len(tag.get_text(strip=True)) > 10]
-                text_bundle += "\n".join(content_parts[:40])
+                content_parts = [tag.get_text(strip=True) for tag in soup.find_all(['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'div', 'span', 'li']) if len(tag.get_text(strip=True)) > 15]
+                unique_parts = list(dict.fromkeys(content_parts))
+                text_bundle += "\n".join(unique_parts[:100])
             
             if depth > 1:
                 sub_links = []
+                keywords = ['about', 'contact', 'project', 'products', 'cases', 'services', 'profile', '关于', '联系', '项目', '产品', '案例', '工程', '合作', '服务', '简介', '业务', '分公司', '门店']
                 for a in soup.find_all('a', href=True):
-                    t = a.get_text()
-                    if any(kw in t for kw in ['About', 'Contact', 'Project', 'Products', 'Cases', 'Services', '关于', '联系', '项目', '产品', '案例', '工程', '合作', '服务']):
+                    t = a.get_text().strip().lower()
+                    if any(kw in t for kw in keywords):
                         sub_links.append(urljoin(resp.url, a['href']))
                 
                 for sub_url in list(set(sub_links))[:3]:
                     try:
                         sub_resp = curl_requests.get(sub_url, headers=headers, timeout=8, impersonate="chrome110")
-                        sub_text = trafilatura.extract(sub_resp.content) or sub_resp.text[:500]
-                        text_bundle += f"\n\n--- 子页面 ({sub_url}) ---\n{sub_text[:1000]}"
+                        sub_soup = BeautifulSoup(sub_resp.content, 'html.parser')
+                        sub_text = trafilatura.extract(sub_resp.content) or sub_soup.get_text(separator=' ', strip=True)[:1000]
+                        if sub_text and len(sub_text.strip()) > 20:
+                            text_bundle += f"\n\n--- 子页面 ({sub_url}) ---\n{sub_text[:1500]}"
                     except: continue
                     
             return text_bundle
@@ -496,7 +505,7 @@ if st.button("🚀 开始自动化拓客任务", use_container_width=True):
                 result = {"url": url, "context": context, "analysis": None, "skip_reason": None}
                 if not context or context.startswith("[CRAWL_ERROR]"):
                     result["skip_reason"] = "抓取失败"
-                elif len(context) <= 200:
+                elif len(context) <= 80:
                     result["skip_reason"] = "内容过短"
                 elif not any(kw in context for kw in FLOORING_KEYWORDS):
                     result["skip_reason"] = "内容无行业关键词"
