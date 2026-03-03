@@ -241,7 +241,9 @@ class AIBrain:
             "- 如果是新闻资讯、行业门户、价格行情等非企业官网页面，company_name 填空字符串\n"
             "- 只有确实无法判断所属企业时才留空"
         )
-        user_prompt = f"请分析以下网站内容并返回 JSON：\n\n{text[:8000]}"
+        # Extract URL from text bundle for AI context
+        url_line = text[:200].split('\n')[0] if text else ""
+        user_prompt = f"请分析以下网站内容并返回 JSON。\n来源: {url_line}\n\n{text[:8000]}"
         try:
             if self.provider == "Gemini":
                 client = genai.Client(api_key=self.api_key)
@@ -399,8 +401,9 @@ if st.button("🚀 开始自动化拓客任务", use_container_width=True):
             # Filter and store results in session_state
             leads_data = []
             raw_contexts = []
-            funnel = {"total": len(urls), "blacklisted": 0, "crawl_fail": 0, "too_short": 0, "no_keyword": 0, "ai_fail": 0, "no_name": 0, "low_score": 0, "accepted": 0}
+            funnel = {"total": len(urls), "blacklisted": 0, "crawl_fail": 0, "too_short": 0, "no_keyword": 0, "ai_fail": 0, "no_name": 0, "low_score": 0, "duplicate": 0, "accepted": 0}
             skipped_details = []
+            seen_companies = set()
 
             for r in results:
                 raw_contexts.append({"url": r["url"], "context": r["context"]})
@@ -432,6 +435,14 @@ if st.button("🚀 开始自动化拓客任务", use_container_width=True):
                     skipped_details.append({"url": r["url"], "reason": "AI未识别公司名"})
                     continue
 
+                # Company-name-level dedup
+                name_key = company_name.lower().replace(' ', '')
+                if name_key in seen_companies:
+                    funnel["duplicate"] += 1
+                    skipped_details.append({"url": r["url"], "reason": f"重复公司: {company_name}"})
+                    continue
+                seen_companies.add(name_key)
+
                 analysis['url'] = r['url']
                 if deal_score > 2 and relevance_score >= 4:
                     funnel["accepted"] += 1
@@ -459,14 +470,16 @@ if "leads_data" in st.session_state:
     if "funnel" in st.session_state:
         f = st.session_state["funnel"]
         with st.expander(f"📊 分析漏斗: {f['total']} 个 URL → {f['accepted']} 个有效线索"):
-            cols = st.columns(7)
+            cols = st.columns(4)
             cols[0].metric("资讯站跳过", f.get("blacklisted", 0))
             cols[1].metric("抓取失败", f["crawl_fail"])
-            cols[2].metric("内容过短", f["too_short"])
-            cols[3].metric("无行业词", f.get("no_keyword", 0))
-            cols[4].metric("AI失败", f["ai_fail"])
-            cols[5].metric("无公司名", f["no_name"])
-            cols[6].metric("评分过低", f["low_score"])
+            cols[2].metric("内容过短/无行业词", f["too_short"] + f.get("no_keyword", 0))
+            cols[3].metric("AI失败", f["ai_fail"])
+            cols2 = st.columns(4)
+            cols2[0].metric("无公司名", f["no_name"])
+            cols2[1].metric("评分过低", f["low_score"])
+            cols2[2].metric("重复公司", f.get("duplicate", 0))
+            cols2[3].metric("有效线索", f["accepted"])
 
             if st.session_state.get("skipped_details"):
                 st.caption("被过滤的 URL:")
