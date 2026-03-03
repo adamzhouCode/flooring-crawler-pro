@@ -402,31 +402,42 @@ if st.button("🚀 开始自动化拓客任务", use_container_width=True):
     elif not city: st.error("请输入城市。")
     else:
         with st.status(f"正在通过 {engine_choice} 执行 {len(query_list)} 条搜索指令...") as status:
+            # Over-fetch 3x to compensate for filtering losses
+            fetch_count = min(max_results * 3, 100)  # Google CSE caps at 100
             if engine_choice == "Google Search API (首选)":
-                urls = SearchEngine.search_google_multi(query_list, google_api_key, google_cx, max_results)
+                raw_urls = SearchEngine.search_google_multi(query_list, google_api_key, google_cx, fetch_count)
             else:
-                # Brave: run each query and merge
-                urls = []
+                raw_urls = []
                 seen = set()
-                per_q = max(5, max_results // len(query_list)) if query_list else max_results
+                per_q = max(5, fetch_count // len(query_list)) if query_list else fetch_count
                 for q in query_list:
                     for u in SearchEngine.search_brave(q, search_api_key, per_q):
                         if u not in seen:
                             seen.add(u)
-                            urls.append(u)
-                urls = urls[:max_results]
-            status.update(label=f"搜索完成！发现 {len(urls)} 个高价值目标。", state="complete" if urls else "error")
+                            raw_urls.append(u)
+
+            # Pre-filter: blacklist + domain dedup BEFORE analysis
+            seen_domains = set()
+            urls = []
+            filtered_count = 0
+            for u in raw_urls:
+                if is_url_blacklisted(u):
+                    filtered_count += 1
+                    continue
+                domain = urlparse(u).netloc
+                if domain in seen_domains:
+                    continue
+                seen_domains.add(domain)
+                urls.append(u)
+                if len(urls) >= max_results:
+                    break
+
+            status.update(
+                label=f"搜索完成！获取 {len(raw_urls)} → 过滤后 {len(urls)} 个有效目标（跳过 {filtered_count} 个非企业站）",
+                state="complete" if urls else "error"
+            )
 
         if urls:
-            # Deduplicate by domain (keep first occurrence)
-            seen_domains = set()
-            unique_urls = []
-            for u in urls:
-                domain = urlparse(u).netloc
-                if domain not in seen_domains:
-                    seen_domains.add(domain)
-                    unique_urls.append(u)
-            urls = unique_urls
 
             st.divider()
             brain = AIBrain(provider, ai_api_key, custom_model, base_url)
@@ -435,10 +446,7 @@ if st.button("🚀 开始自动化拓客任务", use_container_width=True):
             progress_bar = st.progress(0, text=f"并行分析中... 0/{len(urls)}")
 
             def process_url(url):
-                """Scrape and analyze a single URL (runs in thread)"""
-                if is_url_blacklisted(url):
-                    return {"url": url, "context": None, "analysis": None, "skip_reason": "非企业站"}
-
+                """Scrape and analyze a single URL (runs in thread). URLs already pre-filtered."""
                 context = Scraper.get_deep_context(url, depth=crawl_depth)
                 result = {"url": url, "context": context, "analysis": None, "skip_reason": None}
                 if not context or context.startswith("[CRAWL_ERROR]"):
@@ -471,7 +479,7 @@ if st.button("🚀 开始自动化拓客任务", use_container_width=True):
             # Filter and store results in session_state
             leads_data = []
             raw_contexts = []
-            funnel = {"total": len(urls), "blacklisted": 0, "crawl_fail": 0, "too_short": 0, "no_keyword": 0, "ai_fail": 0, "no_name": 0, "low_score": 0, "duplicate": 0, "accepted": 0}
+            funnel = {"total": len(raw_urls), "blacklisted": filtered_count, "crawl_fail": 0, "too_short": 0, "no_keyword": 0, "ai_fail": 0, "no_name": 0, "low_score": 0, "duplicate": 0, "accepted": 0}
             skipped_details = []
             seen_companies = set()
 
@@ -479,9 +487,7 @@ if st.button("🚀 开始自动化拓客任务", use_container_width=True):
                 raw_contexts.append({"url": r["url"], "context": r["context"]})
 
                 if r["skip_reason"]:
-                    if "非企业站" in r["skip_reason"]:
-                        funnel["blacklisted"] += 1
-                    elif "抓取失败" in r["skip_reason"]:
+                    if "抓取失败" in r["skip_reason"]:
                         funnel["crawl_fail"] += 1
                     elif "内容过短" in r["skip_reason"]:
                         funnel["too_short"] += 1
