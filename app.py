@@ -311,8 +311,9 @@ with col2:
     st.info(f"搜索指令: {final_query}")
 
 if st.button("🚀 开始自动化拓客任务", use_container_width=True):
+    is_admin = st.session_state.get("password_correct", False)
     limiter = get_limiter()
-    if not limiter.check():
+    if not is_admin and not limiter.check():
         st.error(f"❌ 已达到当日全局搜索上限 ({limiter.daily_limit})。请明天再试或联系管理员。")
     elif not ai_api_key:
         st.error("请输入 AI API 密钥。")
