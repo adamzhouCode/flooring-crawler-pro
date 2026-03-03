@@ -325,7 +325,7 @@ if st.button("🚀 开始自动化拓客任务", use_container_width=True):
             else:
                 urls = SearchEngine.search_brave(final_query, search_api_key, max_results)
             status.update(label=f"搜索完成！发现 {len(urls)} 个高价值目标。", state="complete" if urls else "error")
-        
+
         if urls:
             # Deduplicate by domain (keep first occurrence)
             seen_domains = set()
@@ -337,15 +337,11 @@ if st.button("🚀 开始自动化拓客任务", use_container_width=True):
                     unique_urls.append(u)
             urls = unique_urls
 
-            with st.expander("🛠️ 调试: 搜索到的原始 URL 列表"):
-                for i, u in enumerate(urls): st.write(f"{i+1}. {u}")
-
             st.divider()
             brain = AIBrain(provider, ai_api_key, custom_model, base_url)
             persona = INDUSTRY_PRESETS[industry]["persona"]
             focus = INDUSTRY_PRESETS[industry]["focus"]
             progress_bar = st.progress(0, text=f"并行分析中... 0/{len(urls)}")
-            status_text = st.empty()
 
             def process_url(url):
                 """Scrape and analyze a single URL (runs in thread)"""
@@ -370,12 +366,11 @@ if st.button("🚀 开始自动化拓客任务", use_container_width=True):
 
             progress_bar.progress(1.0, text="分析完成!")
 
-            # Process results on main thread (for Streamlit UI updates)
+            # Filter and store results in session_state
             leads_data = []
+            raw_contexts = []
             for r in results:
-                if show_raw and r["context"]:
-                    with st.expander(f"原文: {r['url']}"): st.text(r["context"])
-
+                raw_contexts.append({"url": r["url"], "context": r["context"]})
                 analysis = r["analysis"]
                 if analysis:
                     try:
@@ -391,15 +386,46 @@ if st.button("🚀 开始自动化拓客任务", use_container_width=True):
                     analysis['url'] = r['url']
                     if deal_score > 2 and relevance_score >= 4:
                         leads_data.append(analysis)
-                        st.success(f"💎 成功识别: **{company_name}** (潜力评分: {deal_score}/10)")
 
-            if leads_data:
-                st.divider()
-                st.header("📋 拓客报表")
-                df = pd.DataFrame(leads_data).rename(columns={'company_name': '名称', 'deal_score': '潜力', 'summary': '业务', 'email': '邮箱', 'phone': '电话', 'url': '网址', 'why': '结论'})
-                st.dataframe(df.sort_values(by='潜力', ascending=False), use_container_width=True)
-                import io
-                buffer = io.BytesIO()
-                with pd.ExcelWriter(buffer, engine='openpyxl') as writer: df.to_excel(writer, index=False)
-                st.download_button("📥 导出 Excel", buffer.getvalue(), f"线索_{city}.xlsx")
-            else: st.error("未发现有效线索。")
+            st.session_state["leads_data"] = leads_data
+            st.session_state["raw_contexts"] = raw_contexts
+            st.session_state["search_urls"] = urls
+            st.session_state["result_city"] = city
+            st.rerun()
+
+# --- Display persisted results ---
+if "leads_data" in st.session_state:
+    urls = st.session_state["search_urls"]
+    leads_data = st.session_state["leads_data"]
+    raw_contexts = st.session_state["raw_contexts"]
+    result_city = st.session_state["result_city"]
+
+    with st.expander(f"🛠️ 调试: 搜索到的 URL 列表 ({len(urls)} 个)"):
+        for i, u in enumerate(urls): st.write(f"{i+1}. {u}")
+
+    if show_raw:
+        for rc in raw_contexts:
+            if rc["context"]:
+                with st.expander(f"原文: {rc['url']}"): st.text(rc["context"])
+
+    if leads_data:
+        for a in leads_data:
+            company = a.get('company_name', '')
+            score = a.get('deal_score', '?')
+            st.success(f"💎 成功识别: **{company}** (潜力评分: {score}/10)")
+
+        st.divider()
+        st.header("📋 拓客报表")
+        df = pd.DataFrame(leads_data).rename(columns={'company_name': '名称', 'deal_score': '潜力', 'summary': '业务', 'email': '邮箱', 'phone': '电话', 'url': '网址', 'why': '结论'})
+        st.dataframe(df.sort_values(by='潜力', ascending=False), use_container_width=True)
+        import io
+        buffer = io.BytesIO()
+        with pd.ExcelWriter(buffer, engine='openpyxl') as writer: df.to_excel(writer, index=False)
+        st.download_button("📥 导出 Excel", buffer.getvalue(), f"线索_{result_city}.xlsx")
+    else:
+        st.error("未发现有效线索。")
+
+    if st.button("🗑️ 清除结果", use_container_width=True):
+        for key in ["leads_data", "raw_contexts", "search_urls", "result_city"]:
+            st.session_state.pop(key, None)
+        st.rerun()
