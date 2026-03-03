@@ -200,13 +200,12 @@ class SearchEngine:
         all_links = []
         seen = set()
         page = 1
-        per_page = min(max_results, 100)
         while len(all_links) < max_results:
             payload = {
                 "q": query,
                 "gl": "cn",
                 "hl": "zh-cn",
-                "num": per_page,
+                "num": 10,
                 "page": page,
             }
             try:
@@ -221,8 +220,6 @@ class SearchEngine:
                     if link and link not in seen:
                         seen.add(link)
                         all_links.append(link)
-                if len(items) < per_page:
-                    break  # No more results
                 page += 1
             except Exception as e:
                 st.error(f"Serper 搜索失败 (page={page}): {e}")
