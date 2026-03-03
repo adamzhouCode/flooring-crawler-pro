@@ -193,6 +193,31 @@ class SearchEngine:
         return all_links[:max_results]
 
     @staticmethod
+    def search_serper(query: str, api_key: str, max_results: int = 10) -> List[str]:
+        """使用 Serper API 获取真实 Google 搜索结果"""
+        url = "https://google.serper.dev/search"
+        headers = {"X-API-KEY": api_key, "Content-Type": "application/json"}
+        all_links = []
+        # Serper supports max 100 per request via num param
+        payload = {
+            "q": query,
+            "gl": "cn",
+            "hl": "zh-cn",
+            "num": min(max_results, 100),
+        }
+        try:
+            response = requests.post(url, json=payload, headers=headers, timeout=15)
+            response.raise_for_status()
+            data = response.json()
+            for item in data.get("organic", []):
+                link = item.get("link")
+                if link:
+                    all_links.append(link)
+        except Exception as e:
+            st.error(f"Serper 搜索失败: {e}")
+        return all_links[:max_results]
+
+    @staticmethod
     def search_brave(query: str, api_key: str, max_results: int = 10) -> List[str]:
         """使用 Brave Search API (备选方案)"""
         url = "https://api.search.brave.com/res/v1/web/search"
@@ -313,12 +338,14 @@ st.title("🎯 地板爬虫：专业智能拓客引擎")
 
 with st.sidebar:
     st.header("⚙️ 搜索配置")
-    engine_choice = st.selectbox("搜索引擎", ["Google Search API (首选)", "Brave API"])
-    
-    if engine_choice == "Google Search API (首选)":
+    engine_choice = st.selectbox("搜索引擎", ["Serper (首选)", "Google CSE", "Brave API"])
+
+    if engine_choice == "Serper (首选)":
+        serper_api_key = st.text_input("Serper API Key", value=get_secret("SERPER_API_KEY"), type="password")
+        st.caption("[免费注册 Serper (2500次/月)](https://serper.dev/)")
+    elif engine_choice == "Google CSE":
         google_api_key = st.text_input("Google API Key", value=get_secret("GOOGLE_API_KEY"), type="password")
         google_cx = st.text_input("Search Engine ID (CX)", value=get_secret("GOOGLE_CX"), type="password")
-        
     else:
         search_api_key = st.text_input("Brave API Key", value=get_secret("BRAVE_API_KEY"), type="password")
         st.caption("[获取 Brave API 密钥](https://api.search.brave.com/)")
@@ -374,16 +401,20 @@ if st.button("🚀 开始自动化拓客任务", use_container_width=True):
         st.error(f"❌ 已达到当日全局搜索上限 ({limiter.daily_limit})。请明天再试或联系管理员。")
     elif not ai_api_key:
         st.error("请输入 AI API 密钥。")
-    elif engine_choice == "Google Search API (首选)" and (not google_api_key or not google_cx):
+    elif engine_choice == "Serper (首选)" and not serper_api_key:
+        st.error("请输入 Serper API Key。")
+    elif engine_choice == "Google CSE" and (not google_api_key or not google_cx):
         st.error("请完整填写 Google API Key 和 CX ID。")
     elif engine_choice == "Brave API" and not search_api_key:
         st.error("请输入 Brave API Key。")
     elif not city: st.error("请输入城市。")
     else:
-        with st.status(f"正在通过 {engine_choice} 执行 {len(query_list)} 条搜索指令...") as status:
+        with st.status(f"正在通过 {engine_choice} 搜索...") as status:
             # Over-fetch 3x to compensate for filtering losses
-            fetch_count = min(max_results * 3, 100)  # Google CSE caps at 100
-            if engine_choice == "Google Search API (首选)":
+            fetch_count = min(max_results * 3, 100)
+            if engine_choice == "Serper (首选)":
+                raw_urls = SearchEngine.search_serper(final_query, serper_api_key, fetch_count)
+            elif engine_choice == "Google CSE":
                 raw_urls = SearchEngine.search_google_multi(query_list, google_api_key, google_cx, fetch_count)
             else:
                 raw_urls = []
