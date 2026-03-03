@@ -58,49 +58,28 @@ def check_password():
 
 # --- 行业预设配置 (INDUSTRY PRESETS) ---
 INDUSTRY_PRESETS = {
-    "地板品牌/经销商 (Brand & Distributors)": {
-        "queries": [
-            '"{city}" 地板经销商',
-            '"{city}" 地板代理商',
-            '"{city}" 地板批发',
-            '"{city}" 木地板 品牌 专卖',
-        ],
+    "地板经销商 (Distributors)": {
+        "queries": ['{city}地板经销商'],
         "persona": "高级采购经理",
         "focus": "寻找位于{city}的地板品牌商和经销商（非生产工厂）。关注：代理的品牌、经销区域、批发能力、联系方式。排除：地板生产工厂、制造商（这些是我们的竞争对手）。【重要】该企业必须位于或服务于{city}，如果企业明确属于其他城市/省份，relevance_score 必须 ≤ 3。"
     },
-    "地板零售/门店 (Retailers)": {
-        "queries": [
-            '"{city}" 地板专卖店',
-            '"{city}" 建材市场 地板',
-            '"{city}" 地板 门店 展厅',
-        ],
+    "地板零售门店 (Retailers)": {
+        "queries": ['{city}地板专卖店'],
         "persona": "客户经理",
         "focus": "寻找位于{city}的独立地板零售门店或建材市场中的地板商户。关注：经营品牌、门店地址、联系方式。评估其引入新品牌的意愿。排除：地板工厂直营店。【重要】门店必须位于{city}，如果明确属于其他城市/省份，relevance_score 必须 ≤ 3。"
     },
     "房地产开发商 (Developers)": {
-        "queries": [
-            '"{city}" 房地产开发商 精装修',
-            '"{city}" 楼盘 精装 地板',
-            '"{city}" 地产集团 在建项目',
-        ],
+        "queries": ['{city}房地产开发商 精装修'],
         "persona": "供应链管理专家",
         "focus": "寻找在{city}有在建或规划住宅/商业项目的房地产开发商。关注：项目规模、精装修楼盘（需要集采地板）、采购部联系方式。【重要】项目必须位于{city}，如果明确属于其他城市/省份，relevance_score 必须 ≤ 3。"
     },
-    "装饰/设计公司 (Design & Decoration)": {
-        "queries": [
-            '"{city}" 装饰公司 地板',
-            '"{city}" 装修公司 地面材料',
-            '"{city}" 室内设计 地板选材',
-        ],
+    "装饰装修公司 (Decoration)": {
+        "queries": ['{city}装饰公司 地板'],
         "persona": "合作伙伴经理",
         "focus": "寻找位于{city}的承接精装修项目的装饰设计公司（非地板工厂）。关注：项目案例中是否涉及地板选材、合作品牌、项目规模和合作联系方式。【重要】企业必须位于{city}，如果明确属于其他城市/省份，relevance_score 必须 ≤ 3。"
     },
-    "建筑工程/施工 (Contractors)": {
-        "queries": [
-            '"{city}" 地板铺装 工程',
-            '"{city}" 地板安装 施工',
-            '"{city}" 地面工程 承接',
-        ],
+    "地板施工安装 (Contractors)": {
+        "queries": ['{city}地板铺装 施工'],
         "persona": "项目合作经理",
         "focus": "寻找位于{city}的承接地面铺装工程的施工企业（非地板生产商）。关注：工程资质、过往项目规模、材料采购渠道和联系方式。【重要】企业必须位于{city}，如果明确属于其他城市/省份，relevance_score 必须 ≤ 3。"
     }
