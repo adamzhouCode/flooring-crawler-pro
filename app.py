@@ -37,23 +37,28 @@ def check_password():
     """Returns True if the user had the correct password."""
     def password_entered():
         """Checks whether a password entered by the user is correct."""
-        if st.session_state["password"] == get_secret("APP_PASSWORD", "admin123"):
+        entered = st.session_state["password"]
+        admin_pw = get_secret("ADMIN_PASSWORD", "superadmin")
+        user_pw = get_secret("APP_PASSWORD", "admin123")
+        if entered == admin_pw:
             st.session_state["password_correct"] = True
-            del st.session_state["password"]  # don't store password
+            st.session_state["is_admin"] = True
+        elif entered == user_pw:
+            st.session_state["password_correct"] = True
+            st.session_state["is_admin"] = False
         else:
             st.session_state["password_correct"] = False
+            st.session_state["is_admin"] = False
+        del st.session_state["password"]
 
     if "password_correct" not in st.session_state:
-        # First run, show input for password.
         st.text_input("登录密码", type="password", on_change=password_entered, key="password")
         return False
     elif not st.session_state["password_correct"]:
-        # Password incorrect, show input + error.
         st.text_input("登录密码", type="password", on_change=password_entered, key="password")
         st.error("😕 密码错误")
         return False
     else:
-        # Password correct.
         return True
 
 # --- 行业预设配置 (INDUSTRY PRESETS) ---
@@ -386,7 +391,9 @@ with st.sidebar:
         base_url = None
     
     st.divider()
-    max_results = st.slider("搜索结果数量", 5, 50, 10)
+    _is_admin = st.session_state.get("is_admin", False)
+    _max_slider = 200 if _is_admin else 50
+    max_results = st.slider("搜索结果数量", 5, _max_slider, 10)
     crawl_depth = st.slider("抓取层级", 1, 3, 2)
     show_raw = st.checkbox("显示抓取原文 (调试)")
 
@@ -403,7 +410,7 @@ with col2:
         st.info(f"搜索指令: {final_query}")
 
 if st.button("🚀 开始自动化拓客任务", use_container_width=True):
-    is_admin = st.session_state.get("password_correct", False)
+    is_admin = st.session_state.get("is_admin", False)
     limiter = get_limiter()
     if not is_admin and not limiter.check():
         st.error(f"❌ 已达到当日全局搜索上限 ({limiter.daily_limit})。请明天再试或联系管理员。")
