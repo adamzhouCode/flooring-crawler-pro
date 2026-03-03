@@ -109,14 +109,35 @@ INDUSTRY_PRESETS = {
 # 行业关键词预筛（页面必须包含至少一个才送AI分析）
 FLOORING_KEYWORDS = ['地板', '木地板', '地面', '地砖', '地材', '铺装', '建材', 'flooring', 'floor', '装修', '装饰', '房地产', '楼盘', '开发商']
 
-# 新闻/资讯/门户域名黑名单（这些站不会是潜在客户官网）
+# URL 过滤：模式匹配 + 黑名单（替代逐个域名打地鼠）
+# 域名中包含这些关键词的直接跳过（政府、新闻、门户、平台）
+SKIP_DOMAIN_PATTERNS = [
+    'gov.cn', '.gov.', 'news', 'baike', 'wiki',
+    'zhihu.com', 'douban.com', 'bilibili.com', 'toutiao.com',
+    'jianshu.com', 'csdn.net', 'weibo.com', 'qq.com',
+    'sohu.com', 'sina.com', '163.com', 'ifeng.com',
+    'baidu.com', 'map.baidu', 'tieba.baidu',
+    'cnr.cn', 'cctv.com', 'people.com.cn',
+    'customs.gov', 'stats.gov',
+]
+
+# 非企业官网的域名后缀/特征
 BLACKLISTED_DOMAINS = {
     'bjnews.com.cn', 'chinafloor.cn', 'chinatimber.org', 'zhilengwang.cn',
-    'shzh.net', 'sohu.com', 'sina.com.cn', 'news.163.com', 'baidu.com',
-    'zhihu.com', 'douban.com', 'bilibili.com', 'toutiao.com',
-    'jianshu.com', 'csdn.net', 'zol.com.cn', '360che.com',
-    'wikipedia.org', 'baike.baidu.com', 'gov.cn',
+    'shzh.net', 'zol.com.cn', '360che.com', 'pchouse.com.cn',
+    'chery.cn', 'epson.com.cn', 'ciwf.com.cn',
 }
+
+def is_url_blacklisted(url: str) -> bool:
+    """Check if URL is from a non-business site (news, gov, portal, etc.)"""
+    domain = urlparse(url).netloc.lstrip('www.').lower()
+    # Pattern matching — catches all gov.cn subdomains, news sites, etc.
+    if any(pat in domain for pat in SKIP_DOMAIN_PATTERNS):
+        return True
+    # Exact domain blacklist
+    if any(domain == bd or domain.endswith('.' + bd) for bd in BLACKLISTED_DOMAINS):
+        return True
+    return False
 
 # --- 核心引擎类 ---
 
@@ -415,10 +436,8 @@ if st.button("🚀 开始自动化拓客任务", use_container_width=True):
 
             def process_url(url):
                 """Scrape and analyze a single URL (runs in thread)"""
-                # Check domain blacklist before scraping
-                domain = urlparse(url).netloc.lstrip('www.')
-                if any(domain == bd or domain.endswith('.' + bd) for bd in BLACKLISTED_DOMAINS):
-                    return {"url": url, "context": None, "analysis": None, "skip_reason": "新闻/资讯站"}
+                if is_url_blacklisted(url):
+                    return {"url": url, "context": None, "analysis": None, "skip_reason": "非企业站"}
 
                 context = Scraper.get_deep_context(url, depth=crawl_depth)
                 result = {"url": url, "context": context, "analysis": None, "skip_reason": None}
@@ -460,7 +479,7 @@ if st.button("🚀 开始自动化拓客任务", use_container_width=True):
                 raw_contexts.append({"url": r["url"], "context": r["context"]})
 
                 if r["skip_reason"]:
-                    if "新闻/资讯站" in r["skip_reason"]:
+                    if "非企业站" in r["skip_reason"]:
                         funnel["blacklisted"] += 1
                     elif "抓取失败" in r["skip_reason"]:
                         funnel["crawl_fail"] += 1
@@ -522,7 +541,7 @@ if "leads_data" in st.session_state:
         f = st.session_state["funnel"]
         with st.expander(f"📊 分析漏斗: {f['total']} 个 URL → {f['accepted']} 个有效线索"):
             cols = st.columns(4)
-            cols[0].metric("资讯站跳过", f.get("blacklisted", 0))
+            cols[0].metric("非企业站", f.get("blacklisted", 0))
             cols[1].metric("抓取失败", f["crawl_fail"])
             cols[2].metric("内容过短/无行业词", f["too_short"] + f.get("no_keyword", 0))
             cols[3].metric("AI失败", f["ai_fail"])
