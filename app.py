@@ -661,7 +661,8 @@ if "leads_data" in st.session_state:
         st.dataframe(df.sort_values(by='潜力', ascending=False), use_container_width=True)
         import io
         buffer = io.BytesIO()
-        with pd.ExcelWriter(buffer, engine='openpyxl') as writer: df.to_excel(writer, index=False)
+        sorted_df = df.sort_values(by='潜力', ascending=False)
+        with pd.ExcelWriter(buffer, engine='openpyxl') as writer: sorted_df.to_excel(writer, index=False)
         st.download_button("📥 导出 Excel", buffer.getvalue(), f"线索_{result_city}.xlsx")
     else:
         st.error("未发现有效线索。")
