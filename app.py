@@ -114,22 +114,31 @@ def get_limiter():
 class SearchEngine:
     @staticmethod
     def search_google(query: str, api_key: str, cx: str, max_results: int = 10) -> List[str]:
-        """使用 Google Custom Search API (最专业、最准确)"""
+        """使用 Google Custom Search API (最专业、最准确)，自动分页"""
         url = "https://www.googleapis.com/customsearch/v1"
-        params = {
-            "key": api_key,
-            "cx": cx,
-            "q": query,
-            "num": max_results
-        }
-        try:
-            response = requests.get(url, params=params, timeout=10)
-            response.raise_for_status()
-            data = response.json()
-            return [item['link'] for item in data.get("items", [])]
-        except Exception as e:
-            st.error(f"Google 搜索失败: {e}")
-            return []
+        all_links = []
+        # Google CSE allows max 10 per request, paginate with start param
+        for start in range(1, max_results + 1, 10):
+            num = min(10, max_results - start + 1)
+            params = {
+                "key": api_key,
+                "cx": cx,
+                "q": query,
+                "num": num,
+                "start": start
+            }
+            try:
+                response = requests.get(url, params=params, timeout=10)
+                response.raise_for_status()
+                data = response.json()
+                items = data.get("items", [])
+                all_links.extend([item['link'] for item in items])
+                if len(items) < num:
+                    break  # No more results
+            except Exception as e:
+                st.error(f"Google 搜索失败 (start={start}): {e}")
+                break
+        return all_links
 
     @staticmethod
     def search_brave(query: str, api_key: str, max_results: int = 10) -> List[str]:
