@@ -96,7 +96,16 @@ INDUSTRY_PRESETS = {
 }
 
 # 行业关键词预筛（页面必须包含至少一个才送AI分析）
-FLOORING_KEYWORDS = ['地板', '木地板', '地面', '地砖', '地材', '铺装', '建材', 'flooring', 'floor', '装修', '装饰', '房地产', '楼盘', '开发商']
+FLOORING_KEYWORDS = [
+    # 地板核心
+    '地板', '木地板', '地面', '地砖', '地材', '铺装', '建材', 'flooring', 'floor',
+    # 装修装饰
+    '装修', '装饰', '精装',
+    # 设计行业
+    '室内设计', '空间设计', '设计公司', '设计事务所', '设计师', 'interior', 'design',
+    # 房地产
+    '房地产', '楼盘', '开发商',
+]
 
 # URL 过滤：模式匹配 + 黑名单（替代逐个域名打地鼠）
 # 域名中包含这些关键词的直接跳过（政府、新闻、门户、平台）
@@ -108,6 +117,12 @@ SKIP_DOMAIN_PATTERNS = [
     'baidu.com', 'map.baidu', 'tieba.baidu',
     'cnr.cn', 'cctv.com', 'people.com.cn',
     'customs.gov', 'stats.gov',
+    # 社交媒体/内容平台
+    'youtube.com', 'instagram.com', 'pinterest.com', 'linkedin.com',
+    'facebook.com', 'twitter.com', 'x.com',
+    'douyin.com', 'iesdouyin.com', 'cnblogs.com',
+    # 招聘/排行/百科类
+    'jobui.com', 'cnpp.cn',
 ]
 
 # 非企业官网的域名后缀/特征
