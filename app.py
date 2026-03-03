@@ -88,6 +88,15 @@ INDUSTRY_PRESETS = {
 # 行业关键词预筛（页面必须包含至少一个才送AI分析）
 FLOORING_KEYWORDS = ['地板', '木地板', '地面', '地砖', '地材', '铺装', '建材', 'flooring', 'floor', '装修', '装饰', '房地产', '楼盘', '开发商']
 
+# 新闻/资讯/门户域名黑名单（这些站不会是潜在客户官网）
+BLACKLISTED_DOMAINS = {
+    'bjnews.com.cn', 'chinafloor.cn', 'chinatimber.org', 'zhilengwang.cn',
+    'shzh.net', 'sohu.com', 'sina.com.cn', 'news.163.com', 'baidu.com',
+    'zhihu.com', 'douban.com', 'bilibili.com', 'toutiao.com',
+    'jianshu.com', 'csdn.net', 'zol.com.cn', '360che.com',
+    'wikipedia.org', 'baike.baidu.com', 'gov.cn',
+}
+
 # --- 核心引擎类 ---
 
 class GlobalRateLimiter:
@@ -225,8 +234,12 @@ class AIBrain:
             "\"summary\": \"实木地板批发商，有完整联系方式\", \"why\": \"核心地板批发业务，直接联系方式齐全，高价值线索\"}\n\n"
             "## 要求\n"
             "返回严格 JSON 格式：{\"company_name\": \"\", \"email\": \"\", \"phone\": \"\", "
-            "\"relevance_score\": 0-10, \"deal_score\": 0-10, \"summary\": \"\", \"why\": \"\"}\n"
-            "如果找不到公司名称，company_name 填空字符串。"
+            "\"relevance_score\": 0-10, \"deal_score\": 0-10, \"summary\": \"\", \"why\": \"\"}\n\n"
+            "## 关于 company_name\n"
+            "- 优先从页面内容中提取完整公司名（如 XX有限公司）\n"
+            "- 如果页面没有完整公司名，从网站品牌名/域名推断（如域名 artreefloor.com → 雅树地板）\n"
+            "- 如果是新闻资讯、行业门户、价格行情等非企业官网页面，company_name 填空字符串\n"
+            "- 只有确实无法判断所属企业时才留空"
         )
         user_prompt = f"请分析以下网站内容并返回 JSON：\n\n{text[:8000]}"
         try:
@@ -349,6 +362,11 @@ if st.button("🚀 开始自动化拓客任务", use_container_width=True):
 
             def process_url(url):
                 """Scrape and analyze a single URL (runs in thread)"""
+                # Check domain blacklist before scraping
+                domain = urlparse(url).netloc.lstrip('www.')
+                if any(domain == bd or domain.endswith('.' + bd) for bd in BLACKLISTED_DOMAINS):
+                    return {"url": url, "context": None, "analysis": None, "skip_reason": "新闻/资讯站"}
+
                 context = Scraper.get_deep_context(url, depth=crawl_depth)
                 result = {"url": url, "context": context, "analysis": None, "skip_reason": None}
                 if not context or context.startswith("[CRAWL_ERROR]"):
@@ -381,14 +399,16 @@ if st.button("🚀 开始自动化拓客任务", use_container_width=True):
             # Filter and store results in session_state
             leads_data = []
             raw_contexts = []
-            funnel = {"total": len(urls), "crawl_fail": 0, "too_short": 0, "no_keyword": 0, "ai_fail": 0, "no_name": 0, "low_score": 0, "accepted": 0}
+            funnel = {"total": len(urls), "blacklisted": 0, "crawl_fail": 0, "too_short": 0, "no_keyword": 0, "ai_fail": 0, "no_name": 0, "low_score": 0, "accepted": 0}
             skipped_details = []
 
             for r in results:
                 raw_contexts.append({"url": r["url"], "context": r["context"]})
 
                 if r["skip_reason"]:
-                    if "抓取失败" in r["skip_reason"]:
+                    if "新闻/资讯站" in r["skip_reason"]:
+                        funnel["blacklisted"] += 1
+                    elif "抓取失败" in r["skip_reason"]:
                         funnel["crawl_fail"] += 1
                     elif "内容过短" in r["skip_reason"]:
                         funnel["too_short"] += 1
@@ -439,13 +459,14 @@ if "leads_data" in st.session_state:
     if "funnel" in st.session_state:
         f = st.session_state["funnel"]
         with st.expander(f"📊 分析漏斗: {f['total']} 个 URL → {f['accepted']} 个有效线索"):
-            col_a, col_b, col_c, col_d, col_e, col_f = st.columns(6)
-            col_a.metric("抓取失败", f["crawl_fail"])
-            col_b.metric("内容过短", f["too_short"])
-            col_c.metric("无行业词", f.get("no_keyword", 0))
-            col_d.metric("AI失败", f["ai_fail"])
-            col_e.metric("无公司名", f["no_name"])
-            col_f.metric("评分过低", f["low_score"])
+            cols = st.columns(7)
+            cols[0].metric("资讯站跳过", f.get("blacklisted", 0))
+            cols[1].metric("抓取失败", f["crawl_fail"])
+            cols[2].metric("内容过短", f["too_short"])
+            cols[3].metric("无行业词", f.get("no_keyword", 0))
+            cols[4].metric("AI失败", f["ai_fail"])
+            cols[5].metric("无公司名", f["no_name"])
+            cols[6].metric("评分过低", f["low_score"])
 
             if st.session_state.get("skipped_details"):
                 st.caption("被过滤的 URL:")
