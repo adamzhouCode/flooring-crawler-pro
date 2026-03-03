@@ -360,12 +360,12 @@ with col1:
     industry = st.selectbox("目标行业", list(INDUSTRY_PRESETS.keys()))
     city = st.text_input("目标城市", value="上海", placeholder="如：上海、广州")
 with col2:
-    preset_queries = INDUSTRY_PRESETS[industry]["queries"]
-    default_queries_str = "\n".join(preset_queries)
-    search_templates = st.text_area("搜索指令 (每行一条)", value=default_queries_str, height=120)
-    query_list = [q.strip().format(city=city) for q in search_templates.strip().split("\n") if q.strip()] if city else []
-    if query_list:
-        st.info(f"将执行 {len(query_list)} 条搜索指令，合并去重结果")
+    default_query = INDUSTRY_PRESETS[industry]["queries"][0]
+    search_template = st.text_input("搜索指令", value=default_query)
+    final_query = search_template.format(city=city) if city else ""
+    query_list = [final_query] if final_query else []
+    if final_query:
+        st.info(f"搜索指令: {final_query}")
 
 if st.button("🚀 开始自动化拓客任务", use_container_width=True):
     is_admin = st.session_state.get("password_correct", False)
