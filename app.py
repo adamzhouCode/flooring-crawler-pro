@@ -59,27 +59,48 @@ def check_password():
 # --- 行业预设配置 (INDUSTRY PRESETS) ---
 INDUSTRY_PRESETS = {
     "地板品牌/经销商 (Brand & Distributors)": {
-        "query": '"{city}" "地板" 经销商 OR 代理商 OR 批发 -工厂 -制造 -1688.com -alibaba.com',
+        "queries": [
+            '"{city}" 地板经销商',
+            '"{city}" 地板代理商',
+            '"{city}" 地板批发',
+            '"{city}" 木地板 品牌 专卖',
+        ],
         "persona": "高级采购经理",
         "focus": "寻找位于{city}的地板品牌商和经销商（非生产工厂）。关注：代理的品牌、经销区域、批发能力、联系方式。排除：地板生产工厂、制造商（这些是我们的竞争对手）。【重要】该企业必须位于或服务于{city}，如果企业明确属于其他城市/省份，relevance_score 必须 ≤ 3。"
     },
     "地板零售/门店 (Retailers)": {
-        "query": '"{city}" "地板" 专卖店 OR 建材市场 OR 门店 -工厂 -生产 -1688.com',
+        "queries": [
+            '"{city}" 地板专卖店',
+            '"{city}" 建材市场 地板',
+            '"{city}" 地板 门店 展厅',
+        ],
         "persona": "客户经理",
         "focus": "寻找位于{city}的独立地板零售门店或建材市场中的地板商户。关注：经营品牌、门店地址、联系方式。评估其引入新品牌的意愿。排除：地板工厂直营店。【重要】门店必须位于{city}，如果明确属于其他城市/省份，relevance_score 必须 ≤ 3。"
     },
     "房地产开发商 (Developers)": {
-        "query": '"{city}" 房地产 开发商 精装修 OR 楼盘 -1688.com',
+        "queries": [
+            '"{city}" 房地产开发商 精装修',
+            '"{city}" 楼盘 精装 地板',
+            '"{city}" 地产集团 在建项目',
+        ],
         "persona": "供应链管理专家",
         "focus": "寻找在{city}有在建或规划住宅/商业项目的房地产开发商。关注：项目规模、精装修楼盘（需要集采地板）、采购部联系方式。【重要】项目必须位于{city}，如果明确属于其他城市/省份，relevance_score 必须 ≤ 3。"
     },
     "装饰/设计公司 (Design & Decoration)": {
-        "query": '"{city}" "装饰" OR "装修" 公司 地板 OR 地面 -地板厂 -1688.com',
+        "queries": [
+            '"{city}" 装饰公司 地板',
+            '"{city}" 装修公司 地面材料',
+            '"{city}" 室内设计 地板选材',
+        ],
         "persona": "合作伙伴经理",
         "focus": "寻找位于{city}的承接精装修项目的装饰设计公司（非地板工厂）。关注：项目案例中是否涉及地板选材、合作品牌、项目规模和合作联系方式。【重要】企业必须位于{city}，如果明确属于其他城市/省份，relevance_score 必须 ≤ 3。"
     },
     "建筑工程/施工 (Contractors)": {
-        "query": '"{city}" 地板 铺装 OR 安装 OR 施工 工程 -地板厂 -1688.com',
+        "queries": [
+            '"{city}" 地板铺装 工程',
+            '"{city}" 地板安装 施工',
+            '"{city}" 地面工程 承接',
+        ],
         "persona": "项目合作经理",
         "focus": "寻找位于{city}的承接地面铺装工程的施工企业（非地板生产商）。关注：工程资质、过往项目规模、材料采购渠道和联系方式。【重要】企业必须位于{city}，如果明确属于其他城市/省份，relevance_score 必须 ≤ 3。"
     }
@@ -127,7 +148,7 @@ def get_limiter():
 class SearchEngine:
     @staticmethod
     def search_google(query: str, api_key: str, cx: str, max_results: int = 10) -> List[str]:
-        """使用 Google Custom Search API (最专业、最准确)，自动分页"""
+        """使用 Google Custom Search API，自动分页，限定中文/中国结果"""
         url = "https://www.googleapis.com/customsearch/v1"
         all_links = []
         # Google CSE allows max 10 per request, paginate with start param
@@ -138,7 +159,11 @@ class SearchEngine:
                 "cx": cx,
                 "q": query,
                 "num": num,
-                "start": start
+                "start": start,
+                "lr": "lang_zh-CN",    # Only Simplified Chinese pages
+                "gl": "cn",            # Boost results from China
+                "cr": "countryCN",     # Restrict to documents originating in China
+                "hl": "zh-CN",         # Interface language (improves relevance)
             }
             try:
                 response = requests.get(url, params=params, timeout=10)
@@ -152,6 +177,20 @@ class SearchEngine:
                 st.error(f"Google 搜索失败 (start={start}): {e}")
                 break
         return all_links
+
+    @staticmethod
+    def search_google_multi(queries: List[str], api_key: str, cx: str, max_results: int = 10) -> List[str]:
+        """Run multiple simple queries and merge/dedup results"""
+        all_links = []
+        seen = set()
+        per_query = max(5, max_results // len(queries)) if queries else max_results
+        for q in queries:
+            results = SearchEngine.search_google(q, api_key, cx, per_query)
+            for link in results:
+                if link not in seen:
+                    seen.add(link)
+                    all_links.append(link)
+        return all_links[:max_results]
 
     @staticmethod
     def search_brave(query: str, api_key: str, max_results: int = 10) -> List[str]:
@@ -321,9 +360,12 @@ with col1:
     industry = st.selectbox("目标行业", list(INDUSTRY_PRESETS.keys()))
     city = st.text_input("目标城市", value="上海", placeholder="如：上海、广州")
 with col2:
-    search_template = st.text_input("指令模板", value=INDUSTRY_PRESETS[industry]["query"])
-    final_query = search_template.format(city=city) if city else ""
-    st.info(f"搜索指令: {final_query}")
+    preset_queries = INDUSTRY_PRESETS[industry]["queries"]
+    default_queries_str = "\n".join(preset_queries)
+    search_templates = st.text_area("搜索指令 (每行一条)", value=default_queries_str, height=120)
+    query_list = [q.strip().format(city=city) for q in search_templates.strip().split("\n") if q.strip()] if city else []
+    if query_list:
+        st.info(f"将执行 {len(query_list)} 条搜索指令，合并去重结果")
 
 if st.button("🚀 开始自动化拓客任务", use_container_width=True):
     is_admin = st.session_state.get("password_correct", False)
@@ -338,11 +380,20 @@ if st.button("🚀 开始自动化拓客任务", use_container_width=True):
         st.error("请输入 Brave API Key。")
     elif not city: st.error("请输入城市。")
     else:
-        with st.status(f"正在通过 {engine_choice} 获取全球最精准目标...") as status:
+        with st.status(f"正在通过 {engine_choice} 执行 {len(query_list)} 条搜索指令...") as status:
             if engine_choice == "Google Search API (首选)":
-                urls = SearchEngine.search_google(final_query, google_api_key, google_cx, max_results)
+                urls = SearchEngine.search_google_multi(query_list, google_api_key, google_cx, max_results)
             else:
-                urls = SearchEngine.search_brave(final_query, search_api_key, max_results)
+                # Brave: run each query and merge
+                urls = []
+                seen = set()
+                per_q = max(5, max_results // len(query_list)) if query_list else max_results
+                for q in query_list:
+                    for u in SearchEngine.search_brave(q, search_api_key, per_q):
+                        if u not in seen:
+                            seen.add(u)
+                            urls.append(u)
+                urls = urls[:max_results]
             status.update(label=f"搜索完成！发现 {len(urls)} 个高价值目标。", state="complete" if urls else "error")
 
         if urls:
