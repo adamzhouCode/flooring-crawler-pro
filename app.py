@@ -304,12 +304,12 @@ class AIBrain:
 
 # --- UI ---
 
-st.set_page_config(page_title="精工铺地 Pro", layout="wide", page_icon="🏗️")
+st.set_page_config(page_title="地板爬虫", layout="wide", page_icon="�")
 
 if not check_password():
     st.stop()
 
-st.title("🏗️ 精工铺地 Pro：专业拓客引擎")
+st.title("� 地板爬虫：专业智能拓客引擎")
 
 with st.sidebar:
     st.header("⚙️ 搜索配置")
