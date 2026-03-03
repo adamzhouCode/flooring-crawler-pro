@@ -194,27 +194,39 @@ class SearchEngine:
 
     @staticmethod
     def search_serper(query: str, api_key: str, max_results: int = 10) -> List[str]:
-        """使用 Serper API 获取真实 Google 搜索结果"""
+        """使用 Serper API 获取真实 Google 搜索结果，自动分页"""
         url = "https://google.serper.dev/search"
         headers = {"X-API-KEY": api_key, "Content-Type": "application/json"}
         all_links = []
-        # Serper supports max 100 per request via num param
-        payload = {
-            "q": query,
-            "gl": "cn",
-            "hl": "zh-cn",
-            "num": min(max_results, 100),
-        }
-        try:
-            response = requests.post(url, json=payload, headers=headers, timeout=15)
-            response.raise_for_status()
-            data = response.json()
-            for item in data.get("organic", []):
-                link = item.get("link")
-                if link:
-                    all_links.append(link)
-        except Exception as e:
-            st.error(f"Serper 搜索失败: {e}")
+        seen = set()
+        page = 1
+        per_page = min(max_results, 100)
+        while len(all_links) < max_results:
+            payload = {
+                "q": query,
+                "gl": "cn",
+                "hl": "zh-cn",
+                "num": per_page,
+                "page": page,
+            }
+            try:
+                response = requests.post(url, json=payload, headers=headers, timeout=15)
+                response.raise_for_status()
+                data = response.json()
+                items = data.get("organic", [])
+                if not items:
+                    break
+                for item in items:
+                    link = item.get("link")
+                    if link and link not in seen:
+                        seen.add(link)
+                        all_links.append(link)
+                if len(items) < per_page:
+                    break  # No more results
+                page += 1
+            except Exception as e:
+                st.error(f"Serper 搜索失败 (page={page}): {e}")
+                break
         return all_links[:max_results]
 
     @staticmethod
