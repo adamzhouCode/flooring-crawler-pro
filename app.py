@@ -390,8 +390,9 @@ class Scraper:
         except Exception as e: return f"[CRAWL_ERROR] 抓取错误: {e}"
 
 class AIBrain:
-    def __init__(self, provider: str, api_key: str, model_name: str, base_url: Optional[str] = None):
+    def __init__(self, provider: str, api_key: str, model_name: str, base_url: Optional[str] = None, debug_log: bool = False):
         self.provider, self.api_key, self.model_name, self.base_url = provider, api_key, model_name, base_url
+        self.debug_log = debug_log
 
     def analyze(self, text: str, persona: str, focus: str) -> Dict:
         system_prompt = (
@@ -425,10 +426,16 @@ class AIBrain:
         url_line = text[:200].split('\n')[0] if text else ""
         user_prompt = f"请分析以下网站内容并返回 JSON。即使网站是英文，你给出的 summary 和 why 必须用中文，方便我阅读。\n来源: {url_line}\n\n{text[:8000]}"
         
-        # 打印发给大模型的真实生肉内容到终端
-        print(f"\n[{'-'*15} 真实发送给 LLM 的 Payload (前 1000 字符预览) {'-'*15}]\n")
-        print(user_prompt[:1000])
-        print(f"\n[{'-'*50}]\n")
+        if self.debug_log:
+            try:
+                with open("debug_payloads.txt", "a", encoding="utf-8") as f:
+                    f.write(f"\n[{'='*30} PAYLOAD LOG {'='*30}]\n")
+                    f.write(f"MODEL: {self.model_name}\n")
+                    f.write(f"SYSTEM PROMPT:\n{system_prompt}\n\n")
+                    f.write(f"USER PROMPT:\n{user_prompt}\n")
+                    f.write(f"[{'='*73}]\n\n")
+            except Exception as e:
+                print(f"Error writing debug log: {e}")
 
         try:
             if self.provider == "Gemini":
@@ -503,7 +510,11 @@ with st.sidebar:
     _max_slider = 200 if _is_admin else 50
     max_results = st.slider("搜索结果数量", 5, _max_slider, 10)
     crawl_depth = st.slider("抓取层级", 1, 3, 2)
-    show_raw = st.checkbox("显示抓取原文 (调试)")
+    show_raw = st.checkbox("显示抓取原文 (原 debug)")
+    
+    st.divider()
+    st.caption("🔧 高级调试选项")
+    enable_debug_log = st.checkbox("导出 AI 分析生肉文本到文件 (debug_payloads.txt)")
 
 col1, col2 = st.columns([1, 1])
 with col1:
@@ -593,7 +604,13 @@ if st.button("🚀 开始自动化拓客任务", use_container_width=True):
         if urls:
 
             st.divider()
-            brain = AIBrain(provider, ai_api_key, custom_model, base_url)
+            
+            # 清理旧的 debug log
+            if enable_debug_log and os.path.exists("debug_payloads.txt"):
+                try: os.remove("debug_payloads.txt")
+                except: pass
+                
+            brain = AIBrain(provider, ai_api_key, custom_model, base_url, debug_log=enable_debug_log)
             persona = presets_dict[industry]["persona"]
             focus = presets_dict[industry]["focus"].format(city=city)
             progress_bar = st.progress(0, text=f"并行分析中... 0/{len(urls)}")
