@@ -424,6 +424,12 @@ class AIBrain:
         # Extract URL from text bundle for AI context
         url_line = text[:200].split('\n')[0] if text else ""
         user_prompt = f"请分析以下网站内容并返回 JSON。即使网站是英文，你给出的 summary 和 why 必须用中文，方便我阅读。\n来源: {url_line}\n\n{text[:8000]}"
+        
+        # 打印发给大模型的真实生肉内容到终端
+        print(f"\n[{'-'*15} 真实发送给 LLM 的 Payload (前 1000 字符预览) {'-'*15}]\n")
+        print(user_prompt[:1000])
+        print(f"\n[{'-'*50}]\n")
+
         try:
             if self.provider == "Gemini":
                 client = genai.Client(api_key=self.api_key)
