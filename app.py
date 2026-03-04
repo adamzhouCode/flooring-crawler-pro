@@ -509,9 +509,17 @@ with col1:
         "🇬🇧 英国 (UK) - English": ("en", "gb", EN_INDUSTRY_PRESETS, "London"),
         "🇨🇦 加拿大 (Canada) - English": ("en", "ca", EN_INDUSTRY_PRESETS, "Toronto"),
         "🇳🇿 新西兰 (New Zealand) - English": ("en", "nz", EN_INDUSTRY_PRESETS, "Auckland"),
+        "🌐 自定义国家/语言 (Custom)": ("custom", "custom", EN_INDUSTRY_PRESETS, ""),
     }
     market_choice = st.selectbox("搜索区域/语言 (Market & Region)", list(MARKET_OPTIONS.keys()))
     lang_mode, country_code, presets_dict, default_city = MARKET_OPTIONS[market_choice]
+    
+    if market_choice == "🌐 自定义国家/语言 (Custom)":
+        col2_1, col2_2 = st.columns(2)
+        with col2_1:
+            country_code = st.text_input("国家代码 (Country Code)", value="de", help="例如: de (德国), mx (墨西哥), sg (新加坡)")
+        with col2_2:
+            lang_mode = st.text_input("语言代码 (Language)", value="en", help="例如: en (英语), es (西班牙语), de (德语)")
     
     industry = st.selectbox("目标行业", list(presets_dict.keys()))
     city = st.text_input("目标城市", value=default_city, placeholder="如：上海、广>州、Dallas、Cape Town")
