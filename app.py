@@ -382,22 +382,18 @@ class Scraper:
             if meta_bundle:
                 text_bundle += "=== 核心业务标识 (Semantic Metadata) ===\n" + "\n".join(meta_bundle) + "\n\n"
 
-            # Primary Text Extraction
-            main_text = trafilatura.extract(resp.content)
+            # Aggressive structural pruning before extracting ANYTHING
+            for noisy_tag in soup.find_all(['nav', 'header', 'footer', 'aside', 'script', 'style', 'noscript', 'canvas', 'video', 'button']):
+                noisy_tag.decompose()
+            for noisy_block in soup.find_all(attrs={'class': re.compile(r'menu|nav|footer|sidebar|banner|slider|carousel', re.I)}):
+                noisy_block.decompose()
+
+            # Primary Text Extraction on cleaned DOM
+            main_text = trafilatura.extract(str(soup))
             if main_text and len(main_text) > 200:
                 text_bundle += "=== 页面主体正文 ===\n" + main_text
             else:
-                # Fallback: Aggressive structural pruning before extracting
                 text_bundle += "=== 页面离散文本 (去噪提纯后) ===\n"
-                
-                # Decompose navigation, footers, scripts, and stylistic chunks
-                for noisy_tag in soup.find_all(['nav', 'header', 'footer', 'aside', 'script', 'style', 'noscript', 'canvas', 'video', 'button']):
-                    noisy_tag.decompose()
-                
-                # Decompose elements with typical layout/menu class names
-                for noisy_block in soup.find_all(attrs={'class': re.compile(r'menu|nav|footer|sidebar|banner|slider|carousel', re.I)}):
-                    noisy_block.decompose()
-                    
                 content_parts = [tag.get_text(strip=True) for tag in soup.find_all(['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'div', 'span', 'li']) if len(tag.get_text(strip=True)) > 15]
                 unique_parts = list(dict.fromkeys(content_parts))
                 text_bundle += "\n".join(unique_parts[:100])
@@ -414,10 +410,15 @@ class Scraper:
                     try:
                         sub_resp = curl_requests.get(sub_url, headers=headers, timeout=8, impersonate="chrome110")
                         sub_soup = BeautifulSoup(sub_resp.content, 'html.parser')
-                        sub_text = trafilatura.extract(sub_resp.content)
+                        
+                        # Prune DOM before extraction
+                        for noisy_tag in sub_soup.find_all(['nav', 'header', 'footer', 'aside', 'script', 'style', 'noscript', 'canvas', 'video', 'button']):
+                            noisy_tag.decompose()
+                        for noisy_block in sub_soup.find_all(attrs={'class': re.compile(r'menu|nav|footer|sidebar|banner|slider|carousel', re.I)}):
+                            noisy_block.decompose()
+
+                        sub_text = trafilatura.extract(str(sub_soup))
                         if not sub_text or len(sub_text) < 100:
-                            for noisy_tag in sub_soup.find_all(['nav', 'header', 'footer', 'aside', 'script', 'style']):
-                                noisy_tag.decompose()
                             content_parts = [tag.get_text(strip=True) for tag in sub_soup.find_all(['p', 'div', 'li', 'h1', 'h2']) if len(tag.get_text(strip=True)) > 15]
                             sub_text = "\n".join(list(dict.fromkeys(content_parts))[:30])
                             
