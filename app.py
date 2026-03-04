@@ -222,8 +222,8 @@ def get_limiter():
 
 class SearchEngine:
     @staticmethod
-    def search_google(query: str, api_key: str, cx: str, max_results: int = 10, lang_mode: str = "zh") -> List[str]:
-        """使用 Google Custom Search API，自动分页，支持多语言"""
+    def search_google(query: str, api_key: str, cx: str, max_results: int = 10, lang_mode: str = "zh", country_code: str = "cn") -> List[str]:
+        """使用 Google Custom Search API，自动分页，支持多语言和指定国家"""
         url = "https://www.googleapis.com/customsearch/v1"
         all_links = []
         for start in range(1, max_results + 1, 10):
@@ -234,18 +234,13 @@ class SearchEngine:
                 "q": query,
                 "num": num,
                 "start": start,
+                "gl": country_code,
+                "hl": "zh-CN" if lang_mode == "zh" else "en",
             }
             if lang_mode == "zh":
                 params.update({
-                    "lr": "lang_zh-CN",    # Only Simplified Chinese pages
-                    "gl": "cn",            # Boost results from China
-                    "cr": "countryCN",     # Restrict to documents originating in China
-                    "hl": "zh-CN",         # Interface language
-                })
-            else:
-                params.update({
-                    "gl": "us",            # Boost US results
-                    "hl": "en",            # Interface language
+                    "lr": "lang_zh-CN",
+                    "cr": f"country{country_code.upper()}",
                 })
             try:
                 response = requests.get(url, params=params, timeout=10)
@@ -261,13 +256,13 @@ class SearchEngine:
         return all_links
 
     @staticmethod
-    def search_google_multi(queries: List[str], api_key: str, cx: str, max_results: int = 10, lang_mode: str = "zh") -> List[str]:
+    def search_google_multi(queries: List[str], api_key: str, cx: str, max_results: int = 10, lang_mode: str = "zh", country_code: str = "cn") -> List[str]:
         """Run multiple simple queries and merge/dedup results"""
         all_links = []
         seen = set()
         per_query = max(5, max_results // len(queries)) if queries else max_results
         for q in queries:
-            results = SearchEngine.search_google(q, api_key, cx, per_query, lang_mode)
+            results = SearchEngine.search_google(q, api_key, cx, per_query, lang_mode, country_code)
             for link in results:
                 if link not in seen:
                     seen.add(link)
@@ -275,7 +270,7 @@ class SearchEngine:
         return all_links[:max_results]
 
     @staticmethod
-    def search_serper(query: str, api_key: str, max_results: int = 10, lang_mode: str = "zh") -> List[str]:
+    def search_serper(query: str, api_key: str, max_results: int = 10, lang_mode: str = "zh", country_code: str = "cn") -> List[str]:
         """使用 Serper API 获取真实 Google 搜索结果，自动分页"""
         url = "https://google.serper.dev/search"
         headers = {"X-API-KEY": api_key, "Content-Type": "application/json"}
@@ -285,7 +280,7 @@ class SearchEngine:
         while len(all_links) < max_results:
             payload = {
                 "q": query,
-                "gl": "cn" if lang_mode == "zh" else "us",
+                "gl": country_code,
                 "hl": "zh-cn" if lang_mode == "zh" else "en",
                 "num": 10,
                 "page": page,
@@ -309,15 +304,16 @@ class SearchEngine:
         return all_links[:max_results]
 
     @staticmethod
-    def search_brave(query: str, api_key: str, max_results: int = 10, lang_mode: str = "zh") -> List[str]:
+    def search_brave(query: str, api_key: str, max_results: int = 10, lang_mode: str = "zh", country_code: str = "cn") -> List[str]:
         """使用 Brave Search API (备选方案)"""
         url = "https://api.search.brave.com/res/v1/web/search"
         headers = {"Accept": "application/json", "X-Subscription-Token": api_key}
-        params = {"q": query, "count": max_results}
-        if lang_mode == "en":
-            params.update({"search_lang": "en", "country": "us"})
-        else:
-            params.update({"search_lang": "zh-hans", "country": "cn"})
+        params = {
+            "q": query,
+            "count": max_results,
+            "country": country_code,
+            "search_lang": "en" if lang_mode == "en" else "zh-hans"
+        }
         try:
             response = requests.get(url, headers=headers, params=params, timeout=10)
             data = response.json()
@@ -505,12 +501,20 @@ with st.sidebar:
 
 col1, col2 = st.columns([1, 1])
 with col1:
-    market_lang = st.selectbox("搜索区域/语言 (Market)", ["中文 (国内市场)", "English (Global/US Market)"])
-    lang_mode = "zh" if "中文" in market_lang else "en"
-    presets_dict = INDUSTRY_PRESETS if lang_mode == "zh" else EN_INDUSTRY_PRESETS
+    MARKET_OPTIONS = {
+        "🇨🇳 中国 (China) - 中文": ("zh", "cn", INDUSTRY_PRESETS, "上海"),
+        "🇺🇸 美国 (USA) - English": ("en", "us", EN_INDUSTRY_PRESETS, "Dallas"),
+        "🇿🇦 南非 (South Africa) - English": ("en", "za", EN_INDUSTRY_PRESETS, "Cape Town"),
+        "🇦🇺 澳大利亚 (Australia) - English": ("en", "au", EN_INDUSTRY_PRESETS, "Sydney"),
+        "🇬🇧 英国 (UK) - English": ("en", "gb", EN_INDUSTRY_PRESETS, "London"),
+        "🇨🇦 加拿大 (Canada) - English": ("en", "ca", EN_INDUSTRY_PRESETS, "Toronto"),
+        "🇳🇿 新西兰 (New Zealand) - English": ("en", "nz", EN_INDUSTRY_PRESETS, "Auckland"),
+    }
+    market_choice = st.selectbox("搜索区域/语言 (Market & Region)", list(MARKET_OPTIONS.keys()))
+    lang_mode, country_code, presets_dict, default_city = MARKET_OPTIONS[market_choice]
     
     industry = st.selectbox("目标行业", list(presets_dict.keys()))
-    city = st.text_input("目标城市", value="上海" if lang_mode == "zh" else "Dallas", placeholder="如：上海、广>州、Dallas、Los Angeles")
+    city = st.text_input("目标城市", value=default_city, placeholder="如：上海、广>州、Dallas、Cape Town")
 with col2:
     default_query = presets_dict[industry]["queries"][0]
     search_template = st.text_input("搜索指令", value=default_query)
@@ -534,19 +538,19 @@ if st.button("🚀 开始自动化拓客任务", use_container_width=True):
         st.error("请输入 Brave API Key。")
     elif not city: st.error("请输入城市。")
     else:
-        with st.status(f"正在通过 {engine_choice} ({lang_mode.upper()}) 搜索...") as status:
+        with st.status(f"正在通过 {engine_choice} ({market_choice}) 搜索...") as status:
             # Over-fetch 3x to compensate for filtering losses
             fetch_count = max_results
             if engine_choice == "Serper (首选)":
-                raw_urls = SearchEngine.search_serper(final_query, serper_api_key, fetch_count, lang_mode)
+                raw_urls = SearchEngine.search_serper(final_query, serper_api_key, fetch_count, lang_mode, country_code)
             elif engine_choice == "Google CSE":
-                raw_urls = SearchEngine.search_google_multi(query_list, google_api_key, google_cx, fetch_count, lang_mode)
+                raw_urls = SearchEngine.search_google_multi(query_list, google_api_key, google_cx, fetch_count, lang_mode, country_code)
             else:
                 raw_urls = []
                 seen = set()
                 per_q = max(5, fetch_count // len(query_list)) if query_list else fetch_count
                 for q in query_list:
-                    for u in SearchEngine.search_brave(q, search_api_key, per_q, lang_mode):
+                    for u in SearchEngine.search_brave(q, search_api_key, per_q, lang_mode, country_code):
                         if u not in seen:
                             seen.add(u)
                             raw_urls.append(u)
