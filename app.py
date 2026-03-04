@@ -361,10 +361,43 @@ class Scraper:
             if emails or phones:
                 text_bundle += f"=== 原始联系信息 ===\n邮箱: {', '.join(emails)}\n电话: {', '.join(phones)}\n\n"
 
+            # Semantic Structure Identification
+            meta_bundle = []
+            if soup.title and soup.title.string:
+                meta_bundle.append(f"网页标题: {soup.title.string.strip()}")
+            
+            desc_tag = soup.find('meta', attrs={'name': 'description'}) or soup.find('meta', attrs={'name': 'Description'})
+            if desc_tag and desc_tag.get('content'):
+                meta_bundle.append(f"业务简介(Meta): {desc_tag['content'].strip()}")
+                
+            keyword_tag = soup.find('meta', attrs={'name': 'keywords'}) or soup.find('meta', attrs={'name': 'Keywords'})
+            if keyword_tag and keyword_tag.get('content'):
+                meta_bundle.append(f"核心关键词(Meta): {keyword_tag['content'].strip()}")
+                
+            img_alts = [img.get('alt').strip() for img in soup.find_all('img', alt=True) if len(img.get('alt', '').strip()) > 3]
+            if img_alts:
+                unique_alts = list(dict.fromkeys(img_alts))[:20]  # Cap at 20 unique image labels
+                meta_bundle.append(f"产品图片元素(AltTags): {', '.join(unique_alts)}")
+                
+            if meta_bundle:
+                text_bundle += "=== 核心业务标识 (Semantic Metadata) ===\n" + "\n".join(meta_bundle) + "\n\n"
+
+            # Primary Text Extraction
             main_text = trafilatura.extract(resp.content)
-            if main_text and len(main_text) > 50:
-                text_bundle += main_text
+            if main_text and len(main_text) > 200:
+                text_bundle += "=== 页面主体正文 ===\n" + main_text
             else:
+                # Fallback: Aggressive structural pruning before extracting
+                text_bundle += "=== 页面离散文本 (去噪提纯后) ===\n"
+                
+                # Decompose navigation, footers, scripts, and stylistic chunks
+                for noisy_tag in soup.find_all(['nav', 'header', 'footer', 'aside', 'script', 'style', 'noscript', 'canvas', 'video', 'button']):
+                    noisy_tag.decompose()
+                
+                # Decompose elements with typical layout/menu class names
+                for noisy_block in soup.find_all(attrs={'class': re.compile(r'menu|nav|footer|sidebar|banner|slider|carousel', re.I)}):
+                    noisy_block.decompose()
+                    
                 content_parts = [tag.get_text(strip=True) for tag in soup.find_all(['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'div', 'span', 'li']) if len(tag.get_text(strip=True)) > 15]
                 unique_parts = list(dict.fromkeys(content_parts))
                 text_bundle += "\n".join(unique_parts[:100])
@@ -381,7 +414,13 @@ class Scraper:
                     try:
                         sub_resp = curl_requests.get(sub_url, headers=headers, timeout=8, impersonate="chrome110")
                         sub_soup = BeautifulSoup(sub_resp.content, 'html.parser')
-                        sub_text = trafilatura.extract(sub_resp.content) or sub_soup.get_text(separator=' ', strip=True)[:1000]
+                        sub_text = trafilatura.extract(sub_resp.content)
+                        if not sub_text or len(sub_text) < 100:
+                            for noisy_tag in sub_soup.find_all(['nav', 'header', 'footer', 'aside', 'script', 'style']):
+                                noisy_tag.decompose()
+                            content_parts = [tag.get_text(strip=True) for tag in sub_soup.find_all(['p', 'div', 'li', 'h1', 'h2']) if len(tag.get_text(strip=True)) > 15]
+                            sub_text = "\n".join(list(dict.fromkeys(content_parts))[:30])
+                            
                         if sub_text and len(sub_text.strip()) > 20:
                             text_bundle += f"\n\n--- 子页面 ({sub_url}) ---\n{sub_text[:1500]}"
                     except: continue
