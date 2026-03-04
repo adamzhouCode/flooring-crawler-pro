@@ -97,6 +97,40 @@ INDUSTRY_PRESETS = {
     }
 }
 
+# --- 英文版预设配置 (EN INDUSTRY PRESETS) ---
+EN_INDUSTRY_PRESETS = {
+    "经销商与批发商 (Distributors & Wholesale)": {
+        "queries": ['"{city}" flooring (distributor OR wholesale OR supplier OR showroom) ("about us" OR "contact us" OR "inc" OR "llc") -jobs -careers -yelp -yellowpages -manufacturer -glassdoor -bbb -directory -houzz'],
+        "persona": "Senior Procurement Manager",
+        "focus": "Looking for flooring distributors and wholesalers located in {city} (NOT manufacturers). Focus on: Brands they carry, distribution areas, wholesale capabilities, and contact info. Exclude: Flooring manufacturers or factories (they are our competitors). [CRITICAL] The business MUST be located in or actively serving {city}. If clearly from another state/city, relevance_score must be ≤ 3."
+    },
+    "零售门店 (Retailers & Showrooms)": {
+        "queries": ['"{city}" flooring (retail OR store OR showroom OR shop) ("about us" OR "contact us" OR "location") -jobs -careers -yelp -yellowpages -manufacturer -glassdoor -bbb -directory -houzz'],
+        "persona": "Account Manager",
+        "focus": "Looking for independent flooring retail stores or showrooms located in {city}. Focus on: Brands carried, store address, contact details. Exclude: Factory direct stores. [CRITICAL] The store MUST be located in {city}. If clearly from another state/city, relevance_score must be ≤ 3."
+    },
+    "房地产开发与营建 (Builders & Developers)": {
+        "queries": ['"{city}" (homebuilder OR "real estate developer" OR developer) "flooring" ("projects" OR "communities" OR "contact") -jobs -careers -yelp -zillow -realtor -glassdoor -bbb'],
+        "persona": "Supply Chain Expert",
+        "focus": "Looking for real estate developers or homebuilders with active/planned residential or commercial projects in {city}. Focus on: Project scale, multi-family units, procurement contact info. [CRITICAL] Must operate in {city}. If clearly from another region, relevance_score must be ≤ 3."
+    },
+    "装修与改造承包商 (Remodelers & GCs)": {
+        "queries": ['"{city}" ("general contractor" OR remodeling OR renovator) "flooring" ("portfolio" OR "about us" OR "contact us" OR "projects") -jobs -careers -yelp -yellowpages -glassdoor -bbb -directory -houzz -angi'],
+        "persona": "Partner Manager",
+        "focus": "Looking for general contractors and remodeling companies in {city} that handle full renovations including flooring. Focus on: Projects involving flooring, brands they use, and partner contact info. [CRITICAL] Must operate in {city}. If clearly from another region, relevance_score must be ≤ 3."
+    },
+    "室内设计 (Interior Design)": {
+        "queries": ['"{city}" ("interior design" OR "design studio" OR "interior architect") "flooring" ("portfolio" OR "about" OR "contact") -jobs -careers -yelp -glassdoor -bbb -directory -houzz -school -course'],
+        "persona": "Partner Manager",
+        "focus": "Looking for interior design firms or studios in {city}. Focus on: Whether designers specify flooring brands in their projects, design styles, and contact info for partnerships. [CRITICAL] Must be located in {city}. If clearly from another region, relevance_score must be ≤ 3."
+    },
+    "专业地板施工方 (Flooring Installers)": {
+        "queries": ['"{city}" flooring (installation OR installer OR contractor) ("services" OR "about us" OR "contact us") -jobs -careers -yelp -yellowpages -glassdoor -bbb -directory -houzz -angi -homeadvisor'],
+        "persona": "Project Partnership Manager",
+        "focus": "Looking for specialized flooring installation contractors in {city} (NOT manufacturers). Focus on: Service expertise, past project size, material sourcing channels, and contact info. [CRITICAL] Must operate in {city}. If clearly from another region, relevance_score must be ≤ 3."
+    }
+}
+
 # 行业关键词预筛（页面必须包含至少一个才送AI分析，放宽限制防止错杀）
 FLOORING_KEYWORDS = [
     # 地板核心
@@ -108,6 +142,9 @@ FLOORING_KEYWORDS = [
     '室内设计', '空间设计', '设计公司', '设计事务所', '设计师', 'interior', 'design',
     # 房地产
     '房地产', '楼盘', '开发商', '地产', '建筑', '工程',
+    # 英文核心地板术语
+    'flooring', 'floor', 'vinyl', 'laminate', 'hardwood', 'spc', 'lvp', 'carpet', 'tile', 'rugs',
+    'plank', 'engineered wood', 'renovation', 'remodeling', 'remodel', 'contractor', 'builder'
 ]
 
 # URL 过滤：匹配确切后缀与黑名单（解决子串匹配错杀问题）
@@ -132,6 +169,11 @@ BLACKLISTED_DOMAINS = {
     'aliexpress.com', 'taobao.com', 'jd.com', 'tmall.com', '1688.com',
     'b2b168.com', 'hc360.com', 'made-in-china.com', 'alibaba.com',
     'makepolo.com', 'ebdoor.com', '慧聪网', 'b2b', 'huangye88.com',
+    # 英文黄页/点评/聚合类
+    'yelp.com', 'yellowpages.com', 'glassdoor.com', 'bbb.org', 'houzz.com',
+    'angi.com', 'homeadvisor.com', 'thumbtack.com', 'porch.com',
+    'zoominfo.com', 'dnb.com', 'bloomberg.com', 'manta.com', 'mapquest.com',
+    'superpages.com', 'dexknows.com', 'chamberofcommerce.com', 'realtor.com', 'zillow.com',
     # 具体杂项站点
     'bjnews.com.cn', 'chinafloor.cn', 'chinatimber.org', 'zhilengwang.cn',
     'shzh.net', 'zol.com.cn', '360che.com', 'pchouse.com.cn',
@@ -180,11 +222,10 @@ def get_limiter():
 
 class SearchEngine:
     @staticmethod
-    def search_google(query: str, api_key: str, cx: str, max_results: int = 10) -> List[str]:
-        """使用 Google Custom Search API，自动分页，限定中文/中国结果"""
+    def search_google(query: str, api_key: str, cx: str, max_results: int = 10, lang_mode: str = "zh") -> List[str]:
+        """使用 Google Custom Search API，自动分页，支持多语言"""
         url = "https://www.googleapis.com/customsearch/v1"
         all_links = []
-        # Google CSE allows max 10 per request, paginate with start param
         for start in range(1, max_results + 1, 10):
             num = min(10, max_results - start + 1)
             params = {
@@ -193,11 +234,19 @@ class SearchEngine:
                 "q": query,
                 "num": num,
                 "start": start,
-                "lr": "lang_zh-CN",    # Only Simplified Chinese pages
-                "gl": "cn",            # Boost results from China
-                "cr": "countryCN",     # Restrict to documents originating in China
-                "hl": "zh-CN",         # Interface language (improves relevance)
             }
+            if lang_mode == "zh":
+                params.update({
+                    "lr": "lang_zh-CN",    # Only Simplified Chinese pages
+                    "gl": "cn",            # Boost results from China
+                    "cr": "countryCN",     # Restrict to documents originating in China
+                    "hl": "zh-CN",         # Interface language
+                })
+            else:
+                params.update({
+                    "gl": "us",            # Boost US results
+                    "hl": "en",            # Interface language
+                })
             try:
                 response = requests.get(url, params=params, timeout=10)
                 response.raise_for_status()
@@ -212,13 +261,13 @@ class SearchEngine:
         return all_links
 
     @staticmethod
-    def search_google_multi(queries: List[str], api_key: str, cx: str, max_results: int = 10) -> List[str]:
+    def search_google_multi(queries: List[str], api_key: str, cx: str, max_results: int = 10, lang_mode: str = "zh") -> List[str]:
         """Run multiple simple queries and merge/dedup results"""
         all_links = []
         seen = set()
         per_query = max(5, max_results // len(queries)) if queries else max_results
         for q in queries:
-            results = SearchEngine.search_google(q, api_key, cx, per_query)
+            results = SearchEngine.search_google(q, api_key, cx, per_query, lang_mode)
             for link in results:
                 if link not in seen:
                     seen.add(link)
@@ -226,7 +275,7 @@ class SearchEngine:
         return all_links[:max_results]
 
     @staticmethod
-    def search_serper(query: str, api_key: str, max_results: int = 10) -> List[str]:
+    def search_serper(query: str, api_key: str, max_results: int = 10, lang_mode: str = "zh") -> List[str]:
         """使用 Serper API 获取真实 Google 搜索结果，自动分页"""
         url = "https://google.serper.dev/search"
         headers = {"X-API-KEY": api_key, "Content-Type": "application/json"}
@@ -236,8 +285,8 @@ class SearchEngine:
         while len(all_links) < max_results:
             payload = {
                 "q": query,
-                "gl": "cn",
-                "hl": "zh-cn",
+                "gl": "cn" if lang_mode == "zh" else "us",
+                "hl": "zh-cn" if lang_mode == "zh" else "en",
                 "num": 10,
                 "page": page,
             }
@@ -260,11 +309,15 @@ class SearchEngine:
         return all_links[:max_results]
 
     @staticmethod
-    def search_brave(query: str, api_key: str, max_results: int = 10) -> List[str]:
+    def search_brave(query: str, api_key: str, max_results: int = 10, lang_mode: str = "zh") -> List[str]:
         """使用 Brave Search API (备选方案)"""
         url = "https://api.search.brave.com/res/v1/web/search"
         headers = {"Accept": "application/json", "X-Subscription-Token": api_key}
         params = {"q": query, "count": max_results}
+        if lang_mode == "en":
+            params.update({"search_lang": "en", "country": "us"})
+        else:
+            params.update({"search_lang": "zh-hans", "country": "cn"})
         try:
             response = requests.get(url, headers=headers, params=params, timeout=10)
             data = response.json()
@@ -374,7 +427,7 @@ class AIBrain:
         )
         # Extract URL from text bundle for AI context
         url_line = text[:200].split('\n')[0] if text else ""
-        user_prompt = f"请分析以下网站内容并返回 JSON。\n来源: {url_line}\n\n{text[:8000]}"
+        user_prompt = f"请分析以下网站内容并返回 JSON。即使网站是英文，你给出的 summary 和 why 必须用中文，方便我阅读。\n来源: {url_line}\n\n{text[:8000]}"
         try:
             if self.provider == "Gemini":
                 client = genai.Client(api_key=self.api_key)
@@ -452,10 +505,14 @@ with st.sidebar:
 
 col1, col2 = st.columns([1, 1])
 with col1:
-    industry = st.selectbox("目标行业", list(INDUSTRY_PRESETS.keys()))
-    city = st.text_input("目标城市", value="上海", placeholder="如：上海、广州")
+    market_lang = st.selectbox("搜索区域/语言 (Market)", ["中文 (国内市场)", "English (Global/US Market)"])
+    lang_mode = "zh" if "中文" in market_lang else "en"
+    presets_dict = INDUSTRY_PRESETS if lang_mode == "zh" else EN_INDUSTRY_PRESETS
+    
+    industry = st.selectbox("目标行业", list(presets_dict.keys()))
+    city = st.text_input("目标城市", value="上海" if lang_mode == "zh" else "Dallas", placeholder="如：上海、广>州、Dallas、Los Angeles")
 with col2:
-    default_query = INDUSTRY_PRESETS[industry]["queries"][0]
+    default_query = presets_dict[industry]["queries"][0]
     search_template = st.text_input("搜索指令", value=default_query)
     final_query = search_template.format(city=city) if city else ""
     query_list = [final_query] if final_query else []
@@ -477,19 +534,19 @@ if st.button("🚀 开始自动化拓客任务", use_container_width=True):
         st.error("请输入 Brave API Key。")
     elif not city: st.error("请输入城市。")
     else:
-        with st.status(f"正在通过 {engine_choice} 搜索...") as status:
+        with st.status(f"正在通过 {engine_choice} ({lang_mode.upper()}) 搜索...") as status:
             # Over-fetch 3x to compensate for filtering losses
             fetch_count = max_results
             if engine_choice == "Serper (首选)":
-                raw_urls = SearchEngine.search_serper(final_query, serper_api_key, fetch_count)
+                raw_urls = SearchEngine.search_serper(final_query, serper_api_key, fetch_count, lang_mode)
             elif engine_choice == "Google CSE":
-                raw_urls = SearchEngine.search_google_multi(query_list, google_api_key, google_cx, fetch_count)
+                raw_urls = SearchEngine.search_google_multi(query_list, google_api_key, google_cx, fetch_count, lang_mode)
             else:
                 raw_urls = []
                 seen = set()
                 per_q = max(5, fetch_count // len(query_list)) if query_list else fetch_count
                 for q in query_list:
-                    for u in SearchEngine.search_brave(q, search_api_key, per_q):
+                    for u in SearchEngine.search_brave(q, search_api_key, per_q, lang_mode):
                         if u not in seen:
                             seen.add(u)
                             raw_urls.append(u)
@@ -519,8 +576,8 @@ if st.button("🚀 开始自动化拓客任务", use_container_width=True):
 
             st.divider()
             brain = AIBrain(provider, ai_api_key, custom_model, base_url)
-            persona = INDUSTRY_PRESETS[industry]["persona"]
-            focus = INDUSTRY_PRESETS[industry]["focus"].format(city=city)
+            persona = presets_dict[industry]["persona"]
+            focus = presets_dict[industry]["focus"].format(city=city)
             progress_bar = st.progress(0, text=f"并行分析中... 0/{len(urls)}")
 
             def process_url(url):
