@@ -63,89 +63,22 @@ def check_password():
     else:
         return True
 
-# --- 行业预设配置 (INDUSTRY PRESETS) ---
-INDUSTRY_PRESETS = {
-    "地板经销商 (Distributors)": {
-        "queries": ['"{city}" 地板 (经销商 OR 代理商 OR 批发 OR 门店) ("关于我们" OR "联系方式" OR "有限公司") -招聘 -黄页 -b2b -名录 -企查查 -招标 -厂家 -百科 -排行榜 -加盟费'],
-        "persona": "高级采购经理",
-        "focus": "寻找位于{city}的地板品牌商和经销商（非生产工厂）。关注：代理的品牌、经销区域、批发能力、联系方式。排除：地板生产工厂、制造商（这些是我们的竞争对手）。【重要】该企业必须位于或服务于{city}，如果企业明确属于其他城市/省份，relevance_score 必须 ≤ 3。"
-    },
-    "地板零售门店 (Retailers)": {
-        "queries": ['"{city}" 地板 (专卖店 OR 门店 OR 体验店 OR 零售) ("关于我们" OR "联系方式" OR "地址") -招聘 -黄页 -b2b -名录 -企查查 -厂家 -百科 -排行榜 -加盟费'],
-        "persona": "客户经理",
-        "focus": "寻找位于{city}的独立地板零售门店或建材市场中的地板商户。关注：经营品牌、门店地址、联系方式。评估其引入新品牌的意愿。排除：地板工厂直营店。【重要】门店必须位于{city}，如果明确属于其他城市/省份，relevance_score 必须 ≤ 3。"
-    },
-    "房地产开发商 (Developers)": {
-        "queries": ['"{city}" (房地产开发商 OR 房产集团) ("精装修" OR "集采" OR "招采") ("集团" OR "置业" OR "联系方式") -招聘 -黄页 -b2b -名录 -信用 -中标公告 -人才'],
-        "persona": "供应链管理专家",
-        "focus": "寻找在{city}有在建或规划住宅/商业项目的房地产开发商。关注：项目规模、精装修楼盘（需要集采地板）、采购部联系方式。【重要】项目必须位于{city}，如果明确属于其他城市/省份，relevance_score 必须 ≤ 3。"
-    },
-    "装饰装修公司 (Decoration)": {
-        "queries": ['"{city}" (装饰公司 OR 装修公司 OR 公装公司) "地板" ("案例" OR "关于我们" OR "联系方式" OR "设计") -招聘 -黄页 -b2b -名录 -企查查 -排行榜 -口碑 -问答'],
-        "persona": "合作伙伴经理",
-        "focus": "寻找位于{city}的承接精装修项目的装饰公司（非地板工厂）。关注：项目案例中是否涉及地板选材、合作品牌、项目规模和合作联系方式。【重要】企业必须位于{city}，如果企业明确属于其他城市/省份，relevance_score 必须 ≤ 3。"
-    },
-    "室内设计公司 (Design)": {
-        "queries": ['"{city}" (室内设计 OR 空间设计) ("事务所" OR "公司" OR "工作室") ("案例" OR "关于我们" OR "联系我们") -招聘 -黄页 -b2b -名录 -排行榜 -培训 -考证'],
-        "persona": "合作伙伴经理",
-        "focus": "寻找位于{city}的室内设计公司。关注：设计师是否在项目中指定地板品牌、设计风格偏好、合作联系方式。【重要】企业必须位于{city}，如果企业明确属于其他城市/省份，relevance_score 必须 ≤ 3。"
-    },
-    "地板施工安装 (Contractors)": {
-        "queries": ['"{city}" 地板 (施工 OR 铺装 OR 安装) 工程 ("公司" OR "关于我们" OR "联系电话") -招聘 -黄页 -b2b -名录 -招标 -采购 -劳务派遣 -招聘网'],
-        "persona": "项目合作经理",
-        "focus": "寻找位于{city}的承接地面铺装工程的施工企业（非地板生产商）。关注：工程资质、过往项目规模、材料采购渠道和联系方式。【重要】企业必须位于{city}，如果明确属于其他城市/省份，relevance_score 必须 ≤ 3。"
-    }
-}
+import glob
 
-# --- 英文版预设配置 (EN INDUSTRY PRESETS) ---
-EN_INDUSTRY_PRESETS = {
-    "经销商与批发商 (Distributors & Wholesale)": {
-        "queries": ['"{city}" flooring (distributor OR wholesale OR supplier OR showroom) ("about us" OR "contact us" OR "inc" OR "llc") -jobs -careers -yelp -yellowpages -manufacturer -glassdoor -bbb -directory -houzz'],
-        "persona": "Senior Procurement Manager",
-        "focus": "Looking for flooring distributors and wholesalers located in {city} (NOT manufacturers). Focus on: Brands they carry, distribution areas, wholesale capabilities, and contact info. Exclude: Flooring manufacturers or factories (they are our competitors). [CRITICAL] The business MUST be located in or actively serving {city}. If clearly from another state/city, relevance_score must be ≤ 3."
-    },
-    "零售门店 (Retailers & Showrooms)": {
-        "queries": ['"{city}" flooring (retail OR store OR showroom OR shop) ("about us" OR "contact us" OR "location") -jobs -careers -yelp -yellowpages -manufacturer -glassdoor -bbb -directory -houzz'],
-        "persona": "Account Manager",
-        "focus": "Looking for independent flooring retail stores or showrooms located in {city}. Focus on: Brands carried, store address, contact details. Exclude: Factory direct stores. [CRITICAL] The store MUST be located in {city}. If clearly from another state/city, relevance_score must be ≤ 3."
-    },
-    "房地产开发与营建 (Builders & Developers)": {
-        "queries": ['"{city}" (homebuilder OR "real estate developer" OR developer) "flooring" ("projects" OR "communities" OR "contact") -jobs -careers -yelp -zillow -realtor -glassdoor -bbb'],
-        "persona": "Supply Chain Expert",
-        "focus": "Looking for real estate developers or homebuilders with active/planned residential or commercial projects in {city}. Focus on: Project scale, multi-family units, procurement contact info. [CRITICAL] Must operate in {city}. If clearly from another region, relevance_score must be ≤ 3."
-    },
-    "装修与改造承包商 (Remodelers & GCs)": {
-        "queries": ['"{city}" ("general contractor" OR remodeling OR renovator) "flooring" ("portfolio" OR "about us" OR "contact us" OR "projects") -jobs -careers -yelp -yellowpages -glassdoor -bbb -directory -houzz -angi'],
-        "persona": "Partner Manager",
-        "focus": "Looking for general contractors and remodeling companies in {city} that handle full renovations including flooring. Focus on: Projects involving flooring, brands they use, and partner contact info. [CRITICAL] Must operate in {city}. If clearly from another region, relevance_score must be ≤ 3."
-    },
-    "室内设计 (Interior Design)": {
-        "queries": ['"{city}" ("interior design" OR "design studio" OR "interior architect") "flooring" ("portfolio" OR "about" OR "contact") -jobs -careers -yelp -glassdoor -bbb -directory -houzz -school -course'],
-        "persona": "Partner Manager",
-        "focus": "Looking for interior design firms or studios in {city}. Focus on: Whether designers specify flooring brands in their projects, design styles, and contact info for partnerships. [CRITICAL] Must be located in {city}. If clearly from another region, relevance_score must be ≤ 3."
-    },
-    "专业地板施工方 (Flooring Installers)": {
-        "queries": ['"{city}" flooring (installation OR installer OR contractor) ("services" OR "about us" OR "contact us") -jobs -careers -yelp -yellowpages -glassdoor -bbb -directory -houzz -angi -homeadvisor'],
-        "persona": "Project Partnership Manager",
-        "focus": "Looking for specialized flooring installation contractors in {city} (NOT manufacturers). Focus on: Service expertise, past project size, material sourcing channels, and contact info. [CRITICAL] Must operate in {city}. If clearly from another region, relevance_score must be ≤ 3."
-    }
-}
+# Load Industry Profiles
+PROFILES = {}
+profile_paths = glob.glob(os.path.join(os.path.dirname(__file__), "profiles", "*.json"))
+for p_file in profile_paths:
+    try:
+        with open(p_file, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            PROFILES[data["industry_id"]] = data
+    except Exception as e:
+        logging.error(f"Failed to load profile {p_file}: {e}")
 
-# 行业关键词预筛（页面必须包含至少一个才送AI分析，放宽限制防止错杀）
-FLOORING_KEYWORDS = [
-    # 地板核心
-    '地板', '木地板', '地面', '地砖', '地材', '铺装', '建材', 'flooring', 'floor',
-    '瓷砖', '大理石', '家居', '软装', '全屋定制', '材料',
-    # 装修装饰
-    '装修', '装饰', '精装', '公装', '家装',
-    # 设计行业
-    '室内设计', '空间设计', '设计公司', '设计事务所', '设计师', 'interior', 'design',
-    # 房地产
-    '房地产', '楼盘', '开发商', '地产', '建筑', '工程',
-    # 英文核心地板术语
-    'flooring', 'floor', 'vinyl', 'laminate', 'hardwood', 'spc', 'lvp', 'carpet', 'tile', 'rugs',
-    'plank', 'engineered wood', 'renovation', 'remodeling', 'remodel', 'contractor', 'builder'
-]
+if not PROFILES:
+    st.error("❌ 找不到行业配置文件 (profiles/*.json)，请确保系统中至少有一个活跃的行业 Profile。")
+    st.stop()
 
 # URL 过滤：匹配确切后缀与黑名单（解决子串匹配错杀问题）
 SKIP_DOMAIN_SUFFIXES = [
@@ -558,18 +491,20 @@ with st.sidebar:
 
 col1, col2 = st.columns([1, 1])
 with col1:
-    MARKET_OPTIONS = {
-        "🇨🇳 中国 (China) - 中文": ("zh", "cn", INDUSTRY_PRESETS, "上海"),
-        "🇺🇸 美国 (USA) - English": ("en", "us", EN_INDUSTRY_PRESETS, "Dallas"),
-        "🇿🇦 南非 (South Africa) - English": ("en", "za", EN_INDUSTRY_PRESETS, "Cape Town"),
-        "🇦🇺 澳大利亚 (Australia) - English": ("en", "au", EN_INDUSTRY_PRESETS, "Sydney"),
-        "🇬🇧 英国 (UK) - English": ("en", "gb", EN_INDUSTRY_PRESETS, "London"),
-        "🇨🇦 加拿大 (Canada) - English": ("en", "ca", EN_INDUSTRY_PRESETS, "Toronto"),
-        "🇳🇿 新西兰 (New Zealand) - English": ("en", "nz", EN_INDUSTRY_PRESETS, "Auckland"),
-        "🌐 自定义国家/语言 (Custom)": ("custom", "custom", EN_INDUSTRY_PRESETS, ""),
-    }
+    profile_names = {v["industry_name"]: k for k, v in PROFILES.items()}
+    selected_profile_name = st.selectbox("工作区/行业模板 (Workspace Profile)", list(profile_names.keys()))
+    active_profile = PROFILES[profile_names[selected_profile_name]]
+    active_keywords = [k.lower() for k in active_profile.get("keywords", [])]
+
+    MARKET_OPTIONS = active_profile["markets"]
     market_choice = st.selectbox("搜索区域/语言 (Market & Region)", list(MARKET_OPTIONS.keys()))
-    lang_mode, country_code, presets_dict, default_city = MARKET_OPTIONS[market_choice]
+    
+    market_config = MARKET_OPTIONS[market_choice]
+    lang_mode = market_config["lang"]
+    country_code = market_config["country"]
+    default_city = market_config["default_city"]
+    preset_group = market_config["preset_group"]
+    presets_dict = active_profile["preset_groups"].get(preset_group, {})
     
     if market_choice == "🌐 自定义国家/语言 (Custom)":
         col2_1, col2_2 = st.columns(2)
@@ -663,7 +598,7 @@ if st.button("🚀 开始自动化拓客任务", use_container_width=True):
                     result["skip_reason"] = "抓取失败"
                 elif len(context) <= 80:
                     result["skip_reason"] = "内容过短"
-                elif not any(kw in context for kw in FLOORING_KEYWORDS):
+                elif active_keywords and not any(kw in context.lower() for kw in active_keywords):
                     result["skip_reason"] = "内容无行业关键词"
                 else:
                     analysis = brain.analyze(context, persona, focus)
