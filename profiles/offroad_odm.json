@@ -1,0 +1,74 @@
+{
+    "industry_id": "offroad_odm",
+    "industry_name": "Off-Road Vehicle Brands (越野车配件品牌/ODM寻拓)",
+    "markets": {
+        "🇺🇸 美国 (USA) - English": {
+            "lang": "en",
+            "country": "us",
+            "default_city": "Los Angeles",
+            "preset_group": "en"
+        },
+        "🇦🇺 澳大利亚 (Australia) - English": {
+            "lang": "en",
+            "country": "au",
+            "default_city": "Melbourne",
+            "preset_group": "en"
+        },
+        "🇨🇦 加拿大 (Canada) - English": {
+            "lang": "en",
+            "country": "ca",
+            "default_city": "Vancouver",
+            "preset_group": "en"
+        }
+    },
+    "preset_groups": {
+        "en": {
+            "越野改装零配件品牌 (Aftermarket Parts Brands)": {
+                "queries": [
+                    "\"{city}\" off-road (parts OR accessories OR bumpers OR suspensions) brand (\"about us\" OR \"our story\" OR \"mission\") -jobs -careers -yelp -yellowpages -glassdoor -amazon -ebay"
+                ],
+                "persona": "中国越野车零配件顶级代工厂 (OEM/ODM) 资深海外商务总监",
+                "focus": "寻找总部位于{city}的越野车改装件/零配件独立品牌（如保险杠、底盘件、车顶架）。\n【核心目标】：判断这家公司是“自主重资产制造”还是“贴牌/轻资产营销驱动”。高度关注页面是否强调他们有强大的设计能力但缺乏工厂实景图（这类最容易接受中国代工）。\n【排除】：纯粹的夫妻修车店、经销商、或者明确注明 100% In-house USA Manufacturing 的重资产核心工厂。\n【重点提取】：决策人联系方式、品牌定位（高端/性价比）、主打车型（丰田、吉普等）。"
+            },
+            "房车与露营拖车品牌 (RV & Camper Trailers)": {
+                "queries": [
+                    "\"{city}\" (camper OR \"off-road trailer\" OR overland) manufacturer (\"about us\" OR \"contact\" OR \"our vehicles\") -jobs -careers -yelp -yellowpages -glassdoor"
+                ],
+                "persona": "中国房车与特种车辆车身件/五金件海外商务拓展总监",
+                "focus": "寻找位于{city}的越野拖车(Off-road Trailer)、露营车或独立房车品牌商。\n【核心思路】：这些企业需要大量的底盘件、五金件、铝合金冲压件，且往往自身产能有限。判断其是否有寻找优质中国供应链进行降本增效（ODM/OEM）的可能。\n【排除】：大型跨国房车巨头（决策链路太长）、纯二手翻新商"
+            },
+            "户外/越野机电与照明品牌 (Lighting & Electronics)": {
+                "queries": [
+                    "\"{city}\" (off-road OR 4x4) (lighting OR LEDs OR winches OR electronics) brand (\"about us\" OR \"contact us\") -jobs -careers -yelp -amazon"
+                ],
+                "persona": "中国顶级越野车灯/绞盘/机电系统 ODM 销售总监",
+                "focus": "寻找位于{city}的越野照明（如 LED 条灯、射灯）、绞盘或机电设备独立品牌。\n【核心目标】：寻找贴牌商（Private Labeler）或需要升级产品线的品牌方。关注他们目前的产品矩阵是否有断层，是否有寻求中国高性价比 ODM 供应链的动机。\n【提取】：品牌定位、现有产品类别、联系电话或采购邮箱。"
+            }
+        }
+    },
+    "keywords": [
+        "off-road",
+        "off road",
+        "4x4",
+        "overland",
+        "accessories",
+        "parts",
+        "bumper",
+        "suspension",
+        "trailer",
+        "camper",
+        "lighting",
+        "winch",
+        "brand",
+        "manufacturer",
+        "design",
+        "fabrication",
+        "jeep",
+        "bronco",
+        "tacoma",
+        "越野",
+        "改装",
+        "房车",
+        "拖车"
+    ]
+}
