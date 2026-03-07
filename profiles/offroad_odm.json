@@ -25,24 +25,24 @@
         "en": {
             "越野改装零配件品牌 (Aftermarket Parts Brands)": {
                 "queries": [
-                    "\"{city}\" off-road (parts OR accessories OR bumpers OR suspensions) brand (\"about us\" OR \"our story\" OR \"mission\") -jobs -careers -yelp -yellowpages -glassdoor -amazon -ebay"
+                    "\"{city}\" off-road (parts OR accessories OR bumpers OR \"roof racks\") brand (\"about us\" OR \"our story\" OR \"mission\") -jobs -careers -yelp -yellowpages -glassdoor -amazon -ebay"
                 ],
-                "persona": "中国越野车零配件顶级代工厂 (OEM/ODM) 资深海外商务总监",
-                "focus": "寻找总部位于{city}的越野车改装件/零配件独立品牌（如保险杠、底盘件、车顶架）。\n【核心目标】：判断这家公司是“自主重资产制造”还是“贴牌/轻资产营销驱动”。高度关注页面是否强调他们有强大的设计能力但缺乏工厂实景图（这类最容易接受中国代工）。\n【排除】：纯粹的夫妻修车店、经销商、或者明确注明 100% In-house USA Manufacturing 的重资产核心工厂。\n【重点提取】：决策人联系方式、品牌定位（高端/性价比）、主打车型（丰田、吉普等）。"
+                "persona": "中国顶级大型钣金与铝制品加工厂 (Sheet Metal & Aluminum Fabrication) 海外大客户总监",
+                "focus": "寻找总部位于{city}的越野车改装件/零配件独立品牌（尤其是销售前杠、后杠、车顶架、底盘护板等需要重型金属加工的产品）。\n【核心目标】：判断这家公司是“自主重资产制造”还是“贴牌/轻资产营销驱动”。高度关注页面是否强调他们有强大的设计能力但缺乏大型激光切割机/折弯机等实景图（这类最迫切需要中国高质量的代工）。\n【排除】：纯粹的夫妻修车店、经销商、或者明确注明 100% In-house USA Manufacturing 的重资产核心工厂。\n【重点提取】：决策人联系方式、主要金属配件产品线（铝合金/钢材材质）、寻求代工的潜在动机。"
             },
             "房车与露营拖车品牌 (RV & Camper Trailers)": {
                 "queries": [
                     "\"{city}\" (camper OR \"off-road trailer\" OR overland) manufacturer (\"about us\" OR \"contact\" OR \"our vehicles\") -jobs -careers -yelp -yellowpages -glassdoor"
                 ],
-                "persona": "中国房车与特种车辆车身件/五金件海外商务拓展总监",
-                "focus": "寻找位于{city}的越野拖车(Off-road Trailer)、露营车或独立房车品牌商。\n【核心思路】：这些企业需要大量的底盘件、五金件、铝合金冲压件，且往往自身产能有限。判断其是否有寻找优质中国供应链进行降本增效（ODM/OEM）的可能。\n【排除】：大型跨国房车巨头（决策链路太长）、纯二手翻新商"
+                "persona": "中国大型精密钣金与铝合金型材制造厂 (金属结构件代工专家) 海外总监",
+                "focus": "寻找位于{city}的越野拖车(Off-road Trailer)、露营车或独立房车品牌商。\n【核心思路】：这些厂属于拼装厂，车身结构、高频损耗的底盘五金件、铝合金侧身冲压件/焊接件需求巨大。判断其是否有寻找优质中国实体钣金工厂进行降本增效（ODM/OEM金属结构件）的可能。\n【提取重点】：他们车身使用的材质（铝合金还是钢结构）、采购/供应链负责人的联系方式。"
             },
-            "户外/越野机电与照明品牌 (Lighting & Electronics)": {
+            "户外/越野机电与照明周边 (Accessories & Lighting)": {
                 "queries": [
-                    "\"{city}\" (off-road OR 4x4) (lighting OR LEDs OR winches OR electronics) brand (\"about us\" OR \"contact us\") -jobs -careers -yelp -amazon"
+                    "\"{city}\" (off-road OR 4x4) (lighting OR LEDs OR winches OR accessories) brand (\"about us\" OR \"contact us\") -jobs -careers -yelp -amazon"
                 ],
-                "persona": "中国顶级越野车灯/绞盘/机电系统 ODM 销售总监",
-                "focus": "寻找位于{city}的越野照明（如 LED 条灯、射灯）、绞盘或机电设备独立品牌。\n【核心目标】：寻找贴牌商（Private Labeler）或需要升级产品线的品牌方。关注他们目前的产品矩阵是否有断层，是否有寻求中国高性价比 ODM 供应链的动机。\n【提取】：品牌定位、现有产品类别、联系电话或采购邮箱。"
+                "persona": "中国顶级铝合金压铸与精密钣金件代工厂 (五金加工) 海外商务负责人",
+                "focus": "寻找位于{city}的越野照明（如 LED 长条灯、射灯）、车载设备或零配件贴牌商（Private Labeler）。\n【核心目标】：这些产品需要海量的散热铝壳压铸件、安装支架(Brackets)、金属挂板(Mounts)。排查他们的产品材质线，直接给他们推销我们成熟的低成本铝合金/钢板定制打样和量产代工能力。"
             }
         }
     },
@@ -54,21 +54,23 @@
         "accessories",
         "parts",
         "bumper",
-        "suspension",
+        "sheet metal",
         "trailer",
         "camper",
         "lighting",
-        "winch",
+        "brackets",
         "brand",
         "manufacturer",
         "design",
         "fabrication",
-        "jeep",
-        "bronco",
-        "tacoma",
+        "aluminum",
+        "steel",
+        "welding",
         "越野",
         "改装",
         "房车",
-        "拖车"
+        "拖车",
+        "钣金",
+        "铝合"
     ]
 }
