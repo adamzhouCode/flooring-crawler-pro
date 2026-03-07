@@ -367,32 +367,24 @@ class AIBrain:
         self.provider, self.api_key, self.model_name, self.base_url = provider, api_key, model_name, base_url
         self.debug_log = debug_log
 
-    def analyze(self, text: str, persona: str, focus: str) -> Dict:
+    def analyze(self, text: str, persona: str, focus: str, scoring_rules: Dict) -> Dict:
         system_prompt = (
-            f"你是一位{persona}，专门负责为地板行业寻找高价值商业线索。\n"
+            f"你是一位{persona}，专门负责为我们寻找高价值商业线索。\n"
             f"分析重点：{focus}\n\n"
             "## 评分标准\n"
-            "deal_score（成交潜力）：\n"
-            "  8-10 = 直接地板相关企业，有明确联系方式\n"
-            "  5-7 = 相关行业（建材、装修），可能有合作机会\n"
-            "  3-4 = 间接相关，线索价值低\n"
-            "  0-2 = 完全无关\n\n"
+            "deal_score（商业合作潜力）：\n"
+            f"  {scoring_rules.get('deal_score', '0-10 评分法则')}\n\n"
             "relevance_score（行业相关度）：\n"
-            "  8-10 = 核心地板业务\n"
-            "  5-7 = 邻近行业（建筑、房地产、装修）\n"
-            "  0-4 = 无关行业\n\n"
+            f"  {scoring_rules.get('relevance_score', '0-10 评分法则')}\n\n"
             "## 示例\n"
-            "输入：上海XX地板有限公司，主营实木地板批发，联系电话 021-55551234，邮箱 sales@xxfloor.com\n"
-            "输出：{\"company_name\": \"上海XX地板有限公司\", \"email\": \"sales@xxfloor.com\", "
-            "\"phone\": \"021-55551234\", \"relevance_score\": 9, \"deal_score\": 9, "
-            "\"summary\": \"实木地板批发商，有完整联系方式\", \"why\": \"核心地板批发业务，直接联系方式齐全，高价值线索\"}\n\n"
+            f"{scoring_rules.get('example', '')}\n\n"
             "## 要求\n"
             "返回严格 JSON 格式：{\"company_name\": \"\", \"email\": \"\", \"phone\": \"\", "
             "\"relevance_score\": 0-10, \"deal_score\": 0-10, \"summary\": \"\", \"why\": \"\"}\n\n"
             "## 关于 company_name\n"
             "- 优先从页面内容中提取完整公司名（如 XX有限公司）\n"
-            "- 如果页面没有完整公司名，从网站品牌名/域名推断（如域名 artreefloor.com → 雅树地板）\n"
-            "- 如果是新闻资讯、行业门户、价格行情等非企业官网页面，company_name 填空字符串\n"
+            "- 如果页面没有完整公司名，从网站品牌名推断\n"
+            "- 如果是非企业实体页面，填空字符串\n"
             "- 只有确实无法判断所属企业时才留空"
         )
         # Extract URL from text bundle for AI context
@@ -611,7 +603,8 @@ if st.button("🚀 开始自动化拓客任务", use_container_width=True):
                 elif active_keywords and not any(kw in context.lower() for kw in active_keywords):
                     result["skip_reason"] = "内容无行业关键词"
                 else:
-                    analysis = brain.analyze(context, persona, focus)
+                    scoring_rules = active_profile.get("scoring_rules", {})
+                    analysis = brain.analyze(context, persona, focus, scoring_rules)
                     if "error" in analysis:
                         result["skip_reason"] = f"AI分析失败: {analysis.get('error', '')[:60]}"
                     else:
