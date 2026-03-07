@@ -439,6 +439,13 @@ if not check_password():
 st.title("🎯 地板爬虫：专业智能拓客引擎")
 
 with st.sidebar:
+    st.header("🏢 工作区 (Workspace)")
+    profile_names = {v["industry_name"]: k for k, v in PROFILES.items()}
+    selected_profile_name = st.selectbox("选择行业模板 (Profile)", list(profile_names.keys()))
+    active_profile = PROFILES[profile_names[selected_profile_name]]
+    active_keywords = [k.lower() for k in active_profile.get("keywords", [])]
+    
+    st.divider()
     st.header("⚙️ 搜索配置")
     engine_choice = st.selectbox("搜索引擎", ["Serper (首选)", "Google CSE", "Brave API"])
 
@@ -491,11 +498,6 @@ with st.sidebar:
 
 col1, col2 = st.columns([1, 1])
 with col1:
-    profile_names = {v["industry_name"]: k for k, v in PROFILES.items()}
-    selected_profile_name = st.selectbox("工作区/行业模板 (Workspace Profile)", list(profile_names.keys()))
-    active_profile = PROFILES[profile_names[selected_profile_name]]
-    active_keywords = [k.lower() for k in active_profile.get("keywords", [])]
-
     MARKET_OPTIONS = active_profile["markets"]
     market_choice = st.selectbox("搜索区域/语言 (Market & Region)", list(MARKET_OPTIONS.keys()))
     
