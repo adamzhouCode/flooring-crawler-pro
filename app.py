@@ -440,9 +440,17 @@ st.title("🎯 地板爬虫：专业智能拓客引擎")
 
 with st.sidebar:
     st.header("🏢 工作区 (Workspace)")
-    profile_names = {v["industry_name"]: k for k, v in PROFILES.items()}
-    selected_profile_name = st.selectbox("选择行业模板 (Profile)", list(profile_names.keys()))
-    active_profile = PROFILES[profile_names[selected_profile_name]]
+    profile_names = list(PROFILES.keys())
+    # Ensure "flooring" is the default if it exists
+    default_index = 0
+    if "flooring" in profile_names:
+        default_index = profile_names.index("flooring")
+        
+    display_names = [PROFILES[p]["industry_name"] for p in profile_names]
+    selected_idx = st.selectbox("选择行业模板 (Profile)", range(len(display_names)), index=default_index, format_func=lambda i: display_names[i])
+    
+    selected_id = profile_names[selected_idx]
+    active_profile = PROFILES[selected_id]
     active_keywords = [k.lower() for k in active_profile.get("keywords", [])]
     
     st.divider()
