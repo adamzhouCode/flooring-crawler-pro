@@ -3,13 +3,31 @@ import pandas as pd
 import json
 import time
 import os
+import sys
 import re
 import random
 import threading
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError as FuturesTimeoutError
 from datetime import datetime
 from typing import List, Dict, Optional
 from urllib.parse import urljoin, urlparse
+
+# --- Debug tracing (写入 debug_trace.log + stderr) ---
+_TRACE_LOCK = threading.Lock()
+_TRACE_FILE = "debug_trace.log"
+
+def trace(stage: str, url: str = "", extra: str = ""):
+    tid = threading.get_ident() % 10000
+    ts = datetime.now().strftime("%H:%M:%S.%f")[:-3]
+    short_url = url[:70] if url else ""
+    line = f"[{ts}] T{tid:<4} {stage:<22} {short_url} {extra}".rstrip()
+    with _TRACE_LOCK:
+        print(line, file=sys.stderr, flush=True)
+        try:
+            with open(_TRACE_FILE, "a", encoding="utf-8") as f:
+                f.write(line + "\n")
+        except Exception:
+            pass
 
 # Scraper & Search
 import requests
@@ -203,37 +221,42 @@ class SearchEngine:
         return all_links[:max_results]
 
     @staticmethod
-    def search_serper(query: str, api_key: str, max_results: int = 10, lang_mode: str = "zh", country_code: str = "cn") -> List[str]:
-        """使用 Serper API 获取真实 Google 搜索结果，自动分页"""
+    def search_serper_multi(queries: List[str], api_key: str, max_results: int = 10, lang_mode: str = "zh", country_code: str = "cn") -> List[str]:
         url = "https://google.serper.dev/search"
         headers = {"X-API-KEY": api_key, "Content-Type": "application/json"}
         all_links = []
         seen = set()
-        page = 1
-        while len(all_links) < max_results:
-            payload = {
-                "q": query,
-                "gl": country_code,
-                "hl": "zh-cn" if lang_mode == "zh" else "en",
-                "num": 10,
-                "page": page,
-            }
-            try:
-                response = requests.post(url, json=payload, headers=headers, timeout=15)
-                response.raise_for_status()
-                data = response.json()
-                items = data.get("organic", [])
-                if not items:
+        per_query = max(10, max_results // len(queries)) if queries else max_results
+        
+        for query in queries:
+            page = 1
+            added_this_query = 0
+            while added_this_query < per_query and len(all_links) < max_results:
+                payload = {
+                    "q": query,
+                    "gl": country_code,
+                    "hl": "zh-cn" if lang_mode == "zh" else "en",
+                    "num": 10,
+                    "page": page,
+                }
+                try:
+                    response = requests.post(url, json=payload, headers=headers, timeout=15)
+                    response.raise_for_status()
+                    data = response.json()
+                    items = data.get("organic", [])
+                    if not items:
+                        break
+                    for item in items:
+                        link = item.get("link")
+                        if link and link not in seen:
+                            seen.add(link)
+                            all_links.append(link)
+                            added_this_query += 1
+                    page += 1
+                except Exception as e:
+                    st.error(f"Serper 搜索失败 (query={query}, page={page}): {e}")
                     break
-                for item in items:
-                    link = item.get("link")
-                    if link and link not in seen:
-                        seen.add(link)
-                        all_links.append(link)
-                page += 1
-            except Exception as e:
-                st.error(f"Serper 搜索失败 (page={page}): {e}")
-                break
+                    
         return all_links[:max_results]
 
     @staticmethod
@@ -256,20 +279,33 @@ class SearchEngine:
             return []
 
 class Scraper:
+    BINARY_SUFFIXES = ('.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx',
+                       '.zip', '.rar', '.7z', '.tar', '.gz', '.exe', '.dmg',
+                       '.mp4', '.mp3', '.avi', '.mov', '.jpg', '.jpeg', '.png', '.gif')
+    MAX_PARSE_BYTES = 3_000_000  # 3MB 上限，超过直接当巨页处理
+
     @staticmethod
     def get_deep_context(url: str, depth: int = 2) -> str:
         headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36'}
+        # 拦截二进制文件下载链接（PDF/压缩包等不是网页）
+        if url.lower().split('?')[0].endswith(Scraper.BINARY_SUFFIXES):
+            return "[CRAWL_ERROR] 非网页链接(二进制文件)"
         try:
             # 禁用警告
             urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-            
+
             try:
                 # 优先尝试 curl_cffi，解决大部分 Cloudflare / TLS 指纹拦截
+                trace("curl_cffi.get>>", url)
                 resp = curl_requests.get(url, headers=headers, timeout=10, impersonate="chrome110", allow_redirects=True)
+                trace("curl_cffi.get<<", url, f"status={resp.status_code} bytes={len(resp.content)}")
             except Exception as e_curl:
+                trace("curl_cffi.fail", url, str(e_curl)[:80])
                 try:
                     # Fallback 到标准 requests（无指纹，且不验证 SSL），适合老站及部分被 curl_cffi 阻断的站
+                    trace("requests.get>>", url)
                     resp = requests.get(url, headers=headers, timeout=10, verify=False, allow_redirects=True)
+                    trace("requests.get<<", url, f"status={resp.status_code} bytes={len(resp.content)}")
                 except Exception as e_req:
                     if "timeout" in str(e_req).lower():
                         return f"[CRAWL_ERROR] 网站连接超时(死链或仅限国内IP访问)"
@@ -283,8 +319,22 @@ class Scraper:
                 if resp.status_code in [404, 500, 502, 504]:
                     return f"[CRAWL_ERROR] 网页打不开或已失效 (HTTP {resp.status_code})"
                 return f"[CRAWL_ERROR] HTTP {resp.status_code}"
-            
-            soup = BeautifulSoup(resp.content, 'html.parser')
+
+            # Content-Type 兜底：很多服务器不把 URL 结尾当 PDF，但返回 application/pdf
+            ctype = resp.headers.get('Content-Type', '').lower()
+            if any(bad in ctype for bad in ('application/pdf', 'application/octet-stream',
+                                             'application/zip', 'application/msword', 'image/', 'video/', 'audio/')):
+                return f"[CRAWL_ERROR] 非 HTML 内容 (Content-Type: {ctype[:50]})"
+
+            # 体积兜底：超过 3MB 直接截断，防止 bs4/trafilatura 卡死
+            raw_bytes = resp.content
+            if len(raw_bytes) > Scraper.MAX_PARSE_BYTES:
+                trace("bs4.oversize", url, f"bytes={len(raw_bytes)} -> truncated to {Scraper.MAX_PARSE_BYTES}")
+                raw_bytes = raw_bytes[:Scraper.MAX_PARSE_BYTES]
+
+            trace("bs4.parse>>", url, f"bytes={len(raw_bytes)}")
+            soup = BeautifulSoup(raw_bytes, 'html.parser')
+            trace("bs4.parse<<", url)
             text_bundle = f"=== 来源网址: {resp.url} ===\n"
 
             # Extract contact info early and place at top
@@ -322,7 +372,9 @@ class Scraper:
                 noisy_block.decompose()
 
             # Primary Text Extraction on cleaned DOM
+            trace("trafilatura>>", url)
             main_text = trafilatura.extract(str(soup))
+            trace("trafilatura<<", url, f"len={len(main_text) if main_text else 0}")
             if main_text and len(main_text) > 200:
                 text_bundle += "=== 页面主体正文 ===\n" + main_text
             else:
@@ -341,8 +393,18 @@ class Scraper:
                 
                 for sub_url in list(set(sub_links))[:3]:
                     try:
+                        # 子页面同样过滤二进制文件
+                        if sub_url.lower().split('?')[0].endswith(Scraper.BINARY_SUFFIXES):
+                            continue
+                        trace("sub.get>>", sub_url)
+                        # 用流式下载长空 sub页，单个子页 限制 512KB
                         sub_resp = curl_requests.get(sub_url, headers=headers, timeout=8, impersonate="chrome110")
-                        sub_soup = BeautifulSoup(sub_resp.content, 'html.parser')
+                        sub_ctype = sub_resp.headers.get('Content-Type', '').lower()
+                        if any(bad in sub_ctype for bad in ('pdf', 'octet-stream', 'zip', 'msword', 'image/', 'video/', 'audio/')):
+                            continue
+                        sub_content = sub_resp.content[:512_000]  # 子页面最多处理 512KB
+                        trace("sub.get<<", sub_url, f"bytes={len(sub_content)}")
+                        sub_soup = BeautifulSoup(sub_content, 'html.parser')
                         
                         # Prune DOM before extraction
                         for noisy_tag in sub_soup.find_all(['nav', 'header', 'footer', 'aside', 'script', 'style', 'noscript', 'canvas', 'video', 'button']):
@@ -350,7 +412,9 @@ class Scraper:
                         for noisy_block in sub_soup.find_all(attrs={'class': re.compile(r'menu|nav|footer|sidebar|banner|slider|carousel', re.I)}):
                             noisy_block.decompose()
 
+                        trace("sub.trafi>>", sub_url)
                         sub_text = trafilatura.extract(str(sub_soup))
+                        trace("sub.trafi<<", sub_url, f"len={len(sub_text) if sub_text else 0}")
                         if not sub_text or len(sub_text) < 100:
                             content_parts = [tag.get_text(strip=True) for tag in sub_soup.find_all(['p', 'div', 'li', 'h1', 'h2']) if len(tag.get_text(strip=True)) > 15]
                             sub_text = "\n".join(list(dict.fromkeys(content_parts))[:30])
@@ -379,8 +443,12 @@ class AIBrain:
             "## 示例\n"
             f"{scoring_rules.get('example', '')}\n\n"
             "## 要求\n"
-            "返回严格 JSON 格式：{\"company_name\": \"\", \"email\": \"\", \"phone\": \"\", "
+            "返回严格 JSON 格式：{\"company_name\": \"\", \"business_type\": \"\", \"email\": \"\", \"phone\": \"\", "
             "\"relevance_score\": 0-10, \"deal_score\": 0-10, \"summary\": \"\", \"why\": \"\"}\n\n"
+            "## 关于 business_type (业务类型分类)\n"
+            "从以下预设类型中选择最符合的一个（必填）：\n"
+            "【批发/分销商】, 【零售门店/C端展厅】, 【房地产/开发】, 【工程施工/包工】, 【装修/设计公司】, 【地材制造商/生产工厂】, 【其它领域/跑偏】\n"
+            "如果网站是一个明确的门店或者只做终端客户选购，请务必标注为【零售门店/C端展厅】。\n\n"
             "## 关于 company_name\n"
             "- 优先从页面内容中提取完整公司名（如 XX有限公司）\n"
             "- 如果页面没有完整公司名，从网站品牌名推断\n"
@@ -404,12 +472,15 @@ class AIBrain:
 
         try:
             if self.provider == "Gemini":
+                trace("ai.gemini>>", url_line)
                 client = genai.Client(api_key=self.api_key)
                 combined_prompt = system_prompt + "\n\n" + user_prompt
                 response = client.models.generate_content(model=self.model_name, contents=combined_prompt, config={'response_mime_type': 'application/json'})
+                trace("ai.gemini<<", url_line)
                 return json.loads(response.text)
             elif self.provider in ["DeepSeek", "OpenAI", "Custom"]:
-                client = OpenAI(api_key=self.api_key, base_url=self.base_url)
+                trace("ai.openai>>", url_line, f"provider={self.provider}")
+                client = OpenAI(api_key=self.api_key, base_url=self.base_url, timeout=45.0, max_retries=1)
                 response = client.chat.completions.create(
                     model=self.model_name,
                     messages=[
@@ -418,8 +489,11 @@ class AIBrain:
                     ],
                     response_format={"type": "json_object"}
                 )
+                trace("ai.openai<<", url_line)
                 return json.loads(response.choices[0].message.content)
-        except Exception as e: return {"error": str(e)}
+        except Exception as e:
+            trace("ai.FAIL", url_line, str(e)[:80])
+            return {"error": str(e)}
 
 # --- UI ---
 
@@ -487,8 +561,8 @@ with st.sidebar:
     
     st.divider()
     _is_admin = st.session_state.get("is_admin", False)
-    _max_slider = 200 if _is_admin else 50
-    max_results = st.slider("搜索结果数量", 5, _max_slider, 10)
+    _max_slider = 300 if _is_admin else 150
+    max_results = st.slider("搜索穷举深度 (URL数量)", 5, _max_slider, 100)
     crawl_depth = st.slider("抓取层级", 1, 3, 2)
     show_raw = st.checkbox("显示抓取原文 (原 debug)")
     
@@ -519,11 +593,13 @@ with col1:
     city = st.text_input("目标城市", value=default_city, placeholder="如：上海、广>州、Dallas、Cape Town")
 with col2:
     default_query = presets_dict[industry]["queries"][0]
-    search_template = st.text_input("搜索指令", value=default_query)
-    final_query = search_template.format(city=city) if city else ""
-    query_list = [final_query] if final_query else []
-    if final_query:
-        st.info(f"搜索指令: {final_query}")
+    search_template = st.text_input("搜索指令 (可自定义修改)", value=default_query)
+    
+    query_list = []
+    if city and search_template:
+        query_list = [search_template.format(city=city)]
+        st.code(f"检索词: {query_list[0]}", language=None)
+
 
 if st.button("🚀 开始自动化拓客任务", use_container_width=True):
     is_admin = st.session_state.get("is_admin", False)
@@ -540,11 +616,10 @@ if st.button("🚀 开始自动化拓客任务", use_container_width=True):
         st.error("请输入 Brave API Key。")
     elif not city: st.error("请输入城市。")
     else:
-        with st.status(f"正在通过 {engine_choice} ({market_choice}) 搜索...") as status:
-            # Over-fetch 3x to compensate for filtering losses
+        with st.status(f"正在通过 {engine_choice} ({market_choice}) 穷举深搜 {len(query_list)} 个变体矩阵...") as status:
             fetch_count = max_results
             if engine_choice == "Serper (首选)":
-                raw_urls = SearchEngine.search_serper(final_query, serper_api_key, fetch_count, lang_mode, country_code)
+                raw_urls = SearchEngine.search_serper_multi(query_list, serper_api_key, fetch_count, lang_mode, country_code)
             elif engine_choice == "Google CSE":
                 raw_urls = SearchEngine.search_google_multi(query_list, google_api_key, google_cx, fetch_count, lang_mode, country_code)
             else:
@@ -587,6 +662,7 @@ if st.button("🚀 开始自动化拓客任务", use_container_width=True):
                 try: os.remove("debug_payloads.txt")
                 except: pass
                 
+            trace("=== SESSION START ===", "", f"urls={len(urls)} workers={min(10, len(urls))} provider={provider}")
             brain = AIBrain(provider, ai_api_key, custom_model, base_url, debug_log=enable_debug_log)
             persona = presets_dict[industry]["persona"]
             focus = presets_dict[industry]["focus"].format(city=city)
@@ -594,33 +670,74 @@ if st.button("🚀 开始自动化拓客任务", use_container_width=True):
 
             def process_url(url):
                 """Scrape and analyze a single URL (runs in thread). URLs already pre-filtered."""
-                context = Scraper.get_deep_context(url, depth=crawl_depth)
-                result = {"url": url, "context": context, "analysis": None, "skip_reason": None}
-                if not context or context.startswith("[CRAWL_ERROR]"):
-                    result["skip_reason"] = "抓取失败"
-                elif len(context) <= 80:
-                    result["skip_reason"] = "内容过短"
-                elif active_keywords and not any(kw in context.lower() for kw in active_keywords):
-                    result["skip_reason"] = "内容无行业关键词"
-                else:
-                    scoring_rules = active_profile.get("scoring_rules", {})
-                    analysis = brain.analyze(context, persona, focus, scoring_rules)
-                    if "error" in analysis:
-                        result["skip_reason"] = f"AI分析失败: {analysis.get('error', '')[:60]}"
+                trace("PROC.start", url)
+                t0 = time.time()
+                try:
+                    context = Scraper.get_deep_context(url, depth=crawl_depth)
+                    result = {"url": url, "context": context, "analysis": None, "skip_reason": None}
+                    if not context or context.startswith("[CRAWL_ERROR]"):
+                        result["skip_reason"] = "抓取失败"
+                    elif len(context) <= 80:
+                        result["skip_reason"] = "内容过短"
+                    elif active_keywords and not any(kw in context.lower() for kw in active_keywords):
+                        result["skip_reason"] = "内容无行业关键词"
                     else:
-                        result["analysis"] = analysis
-                return result
+                        scoring_rules = active_profile.get("scoring_rules", {})
+                        analysis = brain.analyze(context, persona, focus, scoring_rules)
+                        # Guard: only treat as valid if it's a proper dict
+                        if not isinstance(analysis, dict):
+                            result["skip_reason"] = "AI返回格式异常"
+                        elif "error" in analysis:
+                            result["skip_reason"] = f"AI分析失败: {str(analysis.get('error', ''))[:60]}"
+                        else:
+                            result["analysis"] = analysis
+                    trace("PROC.end", url, f"elapsed={time.time()-t0:.1f}s skip={result.get('skip_reason')}")
+                    return result
+                except Exception as e:
+                    trace("PROC.CRASH", url, str(e)[:80])
+                    return {"url": url, "context": None, "analysis": None, "skip_reason": f"线程异常: {str(e)[:80]}"}
 
-            # Run scraping + AI analysis in parallel (5 workers)
-            max_workers = min(5, len(urls))
+            # Run scraping + AI analysis in parallel (10 workers, balanced speed/stability)
+            max_workers = min(10, len(urls))
             results = []
             completed = 0
-            with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                futures = {executor.submit(process_url, url): url for url in urls}
-                for future in as_completed(futures):
-                    results.append(future.result())
-                    completed += 1
-                    progress_bar.progress(completed / len(urls), text=f"并行分析中... {completed}/{len(urls)}")
+            executor = ThreadPoolExecutor(max_workers=max_workers)
+            futures = {executor.submit(process_url, url): url for url in urls}
+            pending = set(futures.keys())
+            STALL_TIMEOUT = 60  # 秒：超过这么久没新完成，就报 pending
+            watchdog_fired = False
+            while pending:
+                try:
+                    done_iter = as_completed(pending, timeout=STALL_TIMEOUT)
+                    future = next(done_iter)
+                except StopIteration:
+                    break
+                except FuturesTimeoutError:
+                    stuck = [futures[f] for f in pending if not f.done()]
+                    trace("WATCHDOG.STALL", "", f"pending={len(stuck)} urls={stuck}")
+                    for f in pending:
+                        if not f.done():
+                            url_key = futures.get(f, "unknown")
+                            results.append({"url": url_key, "context": None, "analysis": None, "skip_reason": "watchdog 强制终止 (60s 无进展)"})
+                            f.cancel()
+                            completed += 1
+                    progress_bar.progress(1.0, text=f"⚠️ watchdog 终止 {len(stuck)} 个卡死任务 (查看 debug_trace.log)")
+                    watchdog_fired = True
+                    break
+
+                pending.discard(future)
+                try:
+                    results.append(future.result(timeout=1))
+                except Exception as e:
+                    url_key = futures.get(future, "unknown")
+                    results.append({"url": url_key, "context": None, "analysis": None, "skip_reason": f"线程超时/崩溃: {str(e)[:60]}"})
+                completed += 1
+                progress_bar.progress(completed / len(urls), text=f"并行分析中... {completed}/{len(urls)}")
+
+            # 不等待卡死的线程（shutdown wait=False 让主流程继续，僵尸线程会在进程退出时自然终结）
+            executor.shutdown(wait=False, cancel_futures=True)
+            if watchdog_fired:
+                st.warning("⚠️ 检测到卡死任务，已强制跳过。请查看项目根目录的 `debug_trace.log` 定位卡住的 URL 和阶段。")
 
             progress_bar.progress(1.0, text="分析完成!")
 
@@ -647,6 +764,18 @@ if st.button("🚀 开始自动化拓客任务", use_container_width=True):
                     continue
 
                 analysis = r["analysis"]
+                # Guard: some AI models wrap the result in a list, unwrap it
+                if isinstance(analysis, list):
+                    if analysis and isinstance(analysis[0], dict):
+                        analysis = analysis[0]
+                    else:
+                        skipped_details.append({"url": r["url"], "reason": "AI 返回格式异常 (list)"})
+                        funnel["ai_fail"] += 1
+                        continue
+                if not isinstance(analysis, dict):
+                    skipped_details.append({"url": r["url"], "reason": "AI 返回格式异常 (非dict)"})
+                    funnel["ai_fail"] += 1
+                    continue
                 try:
                     deal_score = int(float(analysis.get('deal_score', 0)))
                     relevance_score = int(float(analysis.get('relevance_score', 0)))
@@ -669,12 +798,9 @@ if st.button("🚀 开始自动化拓客任务", use_container_width=True):
                 seen_companies.add(name_key)
 
                 analysis['url'] = r['url']
-                if deal_score > 2 and relevance_score >= 4:
-                    funnel["accepted"] += 1
-                    leads_data.append(analysis)
-                else:
-                    funnel["low_score"] += 1
-                    skipped_details.append({"url": r["url"], "reason": f"评分过低 (deal={deal_score}, relevance={relevance_score})"})
+                # 无状态一次性保留，抛弃原有的硬拦截
+                leads_data.append(analysis)
+                funnel["accepted"] += 1
 
             st.session_state["leads_data"] = leads_data
             st.session_state["raw_contexts"] = raw_contexts
@@ -720,20 +846,65 @@ if "leads_data" in st.session_state:
                 with st.expander(f"原文: {rc['url']}"): st.text(rc["context"])
 
     if leads_data:
-        for a in leads_data:
-            company = a.get('company_name', '')
-            score = a.get('deal_score', '?')
-            st.success(f"💎 成功识别: **{company}** (潜力评分: {score}/10)")
-
         st.divider()
-        st.header("📋 拓客报表")
-        df = pd.DataFrame(leads_data).rename(columns={'company_name': '名称', 'deal_score': '潜力', 'summary': '业务', 'email': '邮箱', 'phone': '电话', 'url': '网址', 'why': '结论'})
-        st.dataframe(df.sort_values(by='潜力', ascending=False), use_container_width=True)
+        st.header("📋 交互式线索调音台")
+        
+        # 将原始数据转化为 DataFrame
+        df = pd.DataFrame(leads_data)
+        if 'business_type' not in df.columns:
+            df['business_type'] = '未知'
+            
+        df = df.rename(columns={
+            'company_name': '名称', 
+            'business_type': '类型',
+            'deal_score': '潜力', 
+            'relevance_score': '相关度',
+            'summary': '业务', 
+            'email': '邮箱', 
+            'phone': '电话', 
+            'url': '网址', 
+            'why': 'AI 判定理由'
+        })
+        
+        # Convert score columns to numeric if needed, filling missing with 0
+        df['潜力'] = pd.to_numeric(df['潜力'], errors='coerce').fillna(0).astype(int)
+        df['相关度'] = pd.to_numeric(df['相关度'], errors='coerce').fillna(0).astype(int)
+
+        # 实时过滤器 UI
+        st.markdown("##### 🎛️ 实时过滤条件")
+        col_f1, col_f2, col_f3 = st.columns([2, 1, 1])
+        with col_f1:
+            all_types = df["类型"].dropna().unique().tolist()
+            selected_types = st.multiselect("包含业务类型", all_types, default=all_types)
+        with col_f2:
+            min_rel = st.slider("最低相关度", 0, 10, 5, help="建议 ≥5 ，排除非行业相关的外围企业")
+        with col_f3:
+            min_deal = st.slider("最低潜力分", 0, 10, 4, help="建议 ≥4，排除没留电话或合作可能性低的企业")
+            
+        # 根据动态过滤器计算结果
+        filtered_df = df[
+            (df["类型"].isin(selected_types)) &
+            (df["相关度"] >= min_rel) &
+            (df["潜力"] >= min_deal)
+        ]
+        
+        st.success(f"🔍 当前条件过滤后剩余 candidate: **{len(filtered_df)}** 家 (总候选池 {len(df)} 家)")
+
+        # 呈现最终表格 (支持在前端排序)
+        st.dataframe(
+            filtered_df.sort_values(by=['潜力', '相关度'], ascending=[False, False]), 
+            use_container_width=True,
+            column_config={
+                "网址": st.column_config.LinkColumn("前往网站")
+            }
+        )
+        
         import io
         buffer = io.BytesIO()
-        sorted_df = df.sort_values(by='潜力', ascending=False)
-        with pd.ExcelWriter(buffer, engine='openpyxl') as writer: sorted_df.to_excel(writer, index=False)
-        st.download_button("📥 导出 Excel", buffer.getvalue(), f"线索_{result_city}.xlsx")
+        output_df = filtered_df.sort_values(by=['潜力', '相关度'], ascending=[False, False])
+        with pd.ExcelWriter(buffer, engine='openpyxl') as writer: 
+            output_df.to_excel(writer, index=False)
+        st.download_button("📥 导出当前过滤结果 (Excel)", buffer.getvalue(), f"交互线索_{result_city}.xlsx")
     else:
         st.error("未发现有效线索。")
 
