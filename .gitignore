@@ -29,3 +29,8 @@ ENV/
 使用说明.md
 使用说明.md
 debug_payloads.txt
+debug_trace.log
+
+# show_scout.py 产物
+.scout_cache/
+artifacts/
